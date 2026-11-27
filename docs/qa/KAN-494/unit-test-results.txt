@@ -1,0 +1,30 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan494-9d78a85f/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (7 tests) 30ms
+ ✓ src/features/docs-center/DocsCenter.test.tsx (57 tests) 12449ms
+   ✓ DocsCenter & Help System (KAN-16) (57)
+     ✓ DocsCenterPage Component (11)
+       ✓ navigates next and previous chapters, TOC rail sections, and markdown anchor links 378ms
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (23)
+       ✓ opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click 331ms
+       ✓ renders the 50-feature comparison matrix, non-goal compatibility tables, and clean day-2 operations in DocsCenterPage 1841ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 559ms
+       ✓ covers DocsCenterPage skip to main link, category filter tabs, and copy agent prompt 478ms
+       ✓ asserts resolveSectionElement resolves every Slice-1 docHref anchor in rendered chapter DOM 1854ms
+       ✓ asserts resolveSectionElement resolves Studio-Configuration-Reference Slice-2 section anchors 302ms
+       ✓ resolves all Slice-5 docHref anchors against rendered chapter DOM 3614ms
+
+ Test Files  2 passed (2)
+      Tests  64 passed (64)
+   Start at  19:12:49
+   Duration  13.92s (tests 87%, environment 10%, import 2%, worker 1%)
+
+ % Coverage report from v8
+----------------|---------|----------|---------|---------|-------------------
+File            | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+----------------|---------|----------|---------|---------|-------------------
+All files       |     100 |    97.43 |     100 |     100 |                   
+ docsService.ts |     100 |    97.43 |     100 |     100 | 76                
+----------------|---------|----------|---------|---------|-------------------

@@ -53,6 +53,15 @@ const SECTION_ANCHOR_ALIASES: Readonly<Record<string, string>> = {
   'admin-escalation-and-sandbox-approvals': 'admin-escalation-sandbox-approvals',
   'escalation-approvals': 'admin-escalation-sandbox-approvals',
   'admin-escalation': 'admin-escalation-sandbox-approvals',
+  // Wave B4b section anchor aliases (KAN-494)
+  'saved-views': 'saved-views-and-custom-presets',
+  'table-view-and-column-customization': 'table-view',
+  'csv-and-zip-import-and-export': 'csv-and-password-protected-zip-aes-256-import-and-export',
+  'search-and-filtering': 'overview',
+  'quick-create-work-item-modal-c': 'quick-create-work-item-modal',
+  'the-960px-ticket-peek-drawer-peek': 'the-960px-ticket-peek-drawer',
+  'duplication-and-copying': 'postgresql-issue-copy-and-deep-subtree-duplication-procedure',
+  'activity-stream-and-audit-ledger': '4-tab-activity-feed-and-audit-history',
 };
 
 export function resolveSectionElement(root: ParentNode, rawAnchor: string): Element | null {
