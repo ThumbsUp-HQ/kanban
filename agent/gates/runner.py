@@ -338,7 +338,7 @@ class GateWorkerRunner:
                     hook.allowed_mutable_fields if hook else ("labels", "priority")
                 ),
             }
-            issue_dict = {
+            issue_dict: dict[str, Any] = {
                 "key": (
                     f"{project.identifier}-{issue.sequence_id}"
                     if project and issue
