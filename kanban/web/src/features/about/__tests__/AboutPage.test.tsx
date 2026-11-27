@@ -569,4 +569,126 @@ describe('AboutPage', () => {
       expect(cssContent).toMatch(/\.kb-about-badges\s*\{[^}]*flex-wrap:\s*wrap/);
     });
   });
+
+  describe('FieldHelpHint SBOM Filter Search Integration (KAN-513)', () => {
+    it('renders FieldHelpHint adjacent to SBOM dependency search input label in .kb-about-search-label-row wrapper', async () => {
+      vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValue(mockAboutData);
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sbom-search-input')).toBeDefined();
+      });
+
+      const label = screen.getByText('Search Components & Licenses');
+      const trigger = screen.getByTestId('sbom-search-help-hint');
+      const input = screen.getByTestId('sbom-search-input');
+
+      expect(label).toBeDefined();
+      expect(trigger).toBeDefined();
+      expect(input).toBeDefined();
+      expect(trigger.getAttribute('aria-label')).toBe('Help for Search Components & Licenses');
+      expect(label.getAttribute('for')).toBe('sbom-search-input');
+      expect(input.getAttribute('id')).toBe('sbom-search-input');
+
+      // MANDATORY INVARIANT: never nest FieldHelpHint inside label!
+      expect(label.contains(trigger)).toBe(false);
+      expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
+      expect(document.querySelectorAll('label .field-help-hint').length).toBe(0);
+
+      // Sibling elements in .kb-about-search-label-row wrapper
+      const labelRow = trigger.closest('.kb-about-search-label-row');
+      expect(labelRow).not.toBeNull();
+      expect(labelRow?.contains(label)).toBe(true);
+      expect(labelRow?.contains(trigger)).toBe(true);
+      expect(label.parentElement).toBe(labelRow);
+      expect(trigger.parentElement).toBe(labelRow);
+    });
+
+    it('opens FieldHelpHint popover on focus with summary, defaultValue, and system topology docHref', async () => {
+      vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValue(mockAboutData);
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sbom-search-help-hint')).toBeDefined();
+      });
+
+      const trigger = screen.getByTestId('sbom-search-help-hint');
+
+      act(() => {
+        trigger.focus();
+      });
+
+      const popover = screen.getByTestId('sbom-search-help-hint-popover');
+      expect(popover).toBeDefined();
+      expect(popover.textContent).toContain('Search Components & Licenses');
+      expect(popover.textContent).toContain('Filtering matches both package names and SPDX license identifiers');
+      expect(popover.textContent).toContain('MIT');
+      expect(popover.textContent).toContain('Apache-2.0');
+      expect(popover.textContent).toContain('All Ecosystems');
+
+      const docLink = popover.querySelector('a');
+      expect(docLink).not.toBeNull();
+      expect(docLink?.getAttribute('href')).toBe('/docs/system-topology-and-multi-container-architecture');
+    });
+
+    it('dismisses FieldHelpHint popover on Escape key and restores focus', async () => {
+      vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValue(mockAboutData);
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sbom-search-help-hint')).toBeDefined();
+      });
+
+      const trigger = screen.getByTestId('sbom-search-help-hint');
+
+      act(() => {
+        trigger.focus();
+      });
+
+      expect(screen.getByTestId('sbom-search-help-hint-popover')).toBeDefined();
+
+      act(() => {
+        fireEvent.keyDown(trigger, { key: 'Escape' });
+      });
+
+      expect(screen.queryByTestId('sbom-search-help-hint-popover')).toBeNull();
+    });
+
+    it('verifies HTML 4.10.4 zero nested label-button violations across entire AboutPage DOM', async () => {
+      vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValue(mockAboutData);
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('about-page-container')).toBeDefined();
+      });
+
+      const nestedButtons = document.querySelectorAll('label button.field-help-hint');
+      expect(nestedButtons.length).toBe(0);
+
+      const anyNestedButtons = document.querySelectorAll('label button');
+      expect(anyNestedButtons.length).toBe(0);
+    });
+
+    it('verifies AboutPage.css enforces .kb-about-search-label-row flex styling, canonical tokens, and 44px mobile touch targets', () => {
+      const cssPath = path.resolve(__dirname, '../AboutPage.css');
+      const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+      // Canonical tokens and flex layout
+      expect(cssContent).toContain('.kb-about-search-label-row');
+      expect(cssContent).toContain('display: inline-flex');
+      expect(cssContent).toContain('align-items: center');
+      expect(cssContent).toContain('gap: 6px');
+
+      // Search input desktop 38px height and tokens
+      expect(cssContent).toMatch(/\.kb-about-search-input\s*\{[^}]*min-height:\s*var\(--prop-row-h,\s*38px\)/);
+
+      // Mobile 44px tap target in media query
+      expect(cssContent).toMatch(/@media\s*\(max-width:\s*767px\)[^}]*\{[\s\S]*\.kb-about-search-input\s*\{[^}]*min-height:\s*var\(--tap-min,\s*44px\)/);
+      expect(cssContent).toMatch(/@media\s*\(max-width:\s*767px\)[^}]*\{[\s\S]*\.kb-about-tab-btn\s*\{[^}]*min-height:\s*var\(--tap-min,\s*44px\)/);
+    });
+  });
 });
