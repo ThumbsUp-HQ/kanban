@@ -10,6 +10,7 @@ import {
   fetchProjectCycles,
   fetchProjectModules,
 } from '../drawer-rail/railApi';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import './filterBulk.css';
 
 export interface ActiveFilters {
@@ -566,9 +567,27 @@ export function FilterDisplayBar({
         )}
 
         <div className="filter-axis-select-wrap">
-          <label htmlFor="group-by-select" className="filter-axis-select-label">
-            Group:
-          </label>
+          <div className="filter-axis-label-wrap">
+            <label htmlFor="group-by-select" className="filter-axis-select-label">
+              Group:
+            </label>
+            <FieldHelpHint
+              title="Group Axis"
+              summary="Primary board grouping axis defining vertical column divisions."
+              validValues={[
+                { label: 'State', description: 'Group issues into workflow columns by state.' },
+                { label: 'Priority', description: 'Group issues by priority severity tiers.' },
+                { label: 'Assignee', description: 'Group issues by assigned team member.' },
+                { label: 'Cycle', description: 'Group issues by sprint cadence cycle.' },
+                { label: 'Module', description: 'Group issues by feature module boundary.' },
+                { label: 'Label', description: 'Group issues by assigned tag label.' },
+                { label: 'None', description: 'Render all issues without column grouping.' },
+              ]}
+              defaultValue="State"
+              docHref="/docs/enterprise-whitespace-and-kanban-board"
+              testId="group-by-help"
+            />
+          </div>
           <select
             id="group-by-select"
             className="filter-axis-select"
@@ -585,9 +604,27 @@ export function FilterDisplayBar({
         </div>
 
         <div className="filter-axis-select-wrap">
-          <label htmlFor="subgroup-by-select" className="filter-axis-select-label">
-            Sub-group:
-          </label>
+          <div className="filter-axis-label-wrap">
+            <label htmlFor="subgroup-by-select" className="filter-axis-select-label">
+              Sub-group:
+            </label>
+            <FieldHelpHint
+              title="Sub-group Axis"
+              summary="Secondary swimlane axis partitioning columns into horizontal swimlanes across the board."
+              validValues={[
+                { label: 'None', description: 'Disable horizontal swimlanes.' },
+                { label: 'Assignee', description: 'Partition columns into assignee swimlanes.' },
+                { label: 'Priority', description: 'Partition columns into priority swimlanes.' },
+                { label: 'State', description: 'Partition columns into workflow state swimlanes.' },
+                { label: 'Cycle', description: 'Partition columns into sprint cycle swimlanes.' },
+                { label: 'Module', description: 'Partition columns into feature module swimlanes.' },
+                { label: 'Label', description: 'Partition columns into tag label swimlanes.' },
+              ]}
+              defaultValue="None"
+              docHref="/docs/enterprise-whitespace-and-kanban-board"
+              testId="subgroup-by-help"
+            />
+          </div>
           <select
             id="subgroup-by-select"
             className="filter-axis-select"
