@@ -1,0 +1,255 @@
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.css b/kanban/web/src/features/views/IssueNavigatorBar.css
+index b3bd233c..d4dd9dd5 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.css
++++ b/kanban/web/src/features/views/IssueNavigatorBar.css
+@@ -354,7 +354,7 @@
+   top: calc(100% + 6px);
+   left: 0;
+   z-index: 40;
+-  width: 288px;
++  width: 280px;
+   max-width: calc(100vw - 32px);
+   background: var(--bg-surface, #1e2025);
+   border: 1px solid var(--border-strong, #4b5263);
+@@ -378,8 +378,11 @@
+ }
+ 
+ .state-filter-preset-btn {
+-  flex: 1 1 0;
+-  height: 26px;
++  flex: 1 1 auto;
++  height: auto;
++  min-height: 28px;
++  padding: 4px 6px;
++  white-space: nowrap;
+   background: transparent;
+   color: var(--fg-secondary, #cbd5e1);
+   border: none;
+@@ -435,7 +438,7 @@
+   display: flex;
+   flex-direction: column;
+   gap: var(--space-2, 8px);
+-  max-height: 280px;
++  max-height: 200px;
+   overflow-y: auto;
+ }
+ 
+@@ -553,13 +556,21 @@
+ 
+ /* Responsive touch targets on mobile portrait (<= 767px) and bounded height on landscape (<= 540px) */
+ @media (max-width: 767px) {
++  .state-filter-preset-btn,
++  .navigator-state-trigger,
++  .state-filter-option {
++    min-height: 44px;
++    height: auto;
++  }
++
+   .state-filter-option {
+-    min-height: 40px;
+     padding: 6px 10px;
+   }
+ 
+-  .navigator-state-trigger {
+-    min-height: 36px;
++  .state-filter-search-input {
++    min-height: 44px;
++    height: 44px;
++    font-size: 16px;
+   }
+ }
+ 
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.test.tsx b/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
+index f942503c..f2be8332 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
++++ b/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
+@@ -557,8 +557,8 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
+       // 2. Click 1: transition to basic-2col
+       fireEvent.click(toggleBtn);
+       expect(toggleBtn.getAttribute('data-header-mode')).toBe('basic-2col');
+-      expect(toggleBtn.getAttribute('title')).toBe('Header layout: Expanded 2-Column (click for 1-Line compact)');
+-      expect(toggleBtn.getAttribute('aria-label')).toBe('Cycle header layout mode (current: 2-Col)');
++      expect(toggleBtn.getAttribute('title')).toBe('Header layout: Expanded 2-Column (Default) (click for 1-Line compact)');
++      expect(toggleBtn.getAttribute('aria-label')).toBe('Cycle header layout mode (current: 2-Col (Default))');
+       expect(toggleBtn.querySelector('.navigator-density-icon--collapse-1line')).not.toBeNull();
+       expect(navBar.getAttribute('data-header-mode')).toBe('basic-2col');
+       expect(localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY)).toBe('basic-2col');
+@@ -851,4 +851,30 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
+       expect(source).not.toMatch(/<button\b(?![^>]*\/>)[^>]*>(?:(?!<\/button>)[\s\S])*?<StudioDocLink/i);
+     });
+   });
++
++  describe('Header Mode Button Default Values (KAN-478)', () => {
++    it('appends (Default) to title and aria-label of basic-2col button', () => {
++      render(
++        <IssueNavigatorBar
++          projectKey="KAN"
++          issues={mockIssues}
++          headerMode="basic-2col"
++        />,
++      );
++
++      const col2Btn = screen.getByTestId('header-mode-basic-2col-btn');
++      expect(col2Btn.getAttribute('title')).toBe(
++        'Basic (2col): 2-column header with basic search and compact filter pills (Default)',
++      );
++      expect(col2Btn.getAttribute('aria-label')).toBe('Basic (2-column) (Default)');
++
++      const toggleBtn = screen.getByTestId('navigator-header-density-toggle');
++      expect(toggleBtn.getAttribute('title')).toBe(
++        'Header layout: Expanded 2-Column (Default) (click for 1-Line compact)',
++      );
++      expect(toggleBtn.getAttribute('aria-label')).toBe(
++        'Cycle header layout mode (current: 2-Col (Default))',
++      );
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.tsx b/kanban/web/src/features/views/IssueNavigatorBar.tsx
+index a1cf14d2..9b20010d 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.tsx
++++ b/kanban/web/src/features/views/IssueNavigatorBar.tsx
+@@ -376,14 +376,14 @@ export function IssueNavigatorBar({
+             effectiveHeaderMode === '1col'
+               ? 'Header layout: Compact 1-Column (click to expand to 2-Column)'
+               : effectiveHeaderMode === 'basic-2col'
+-                ? 'Header layout: Expanded 2-Column (click for 1-Line compact)'
++                ? 'Header layout: Expanded 2-Column (Default) (click for 1-Line compact)'
+                 : 'Header layout: Single-Line (click to contract to 1-Column)'
+           }
+           aria-label={
+             effectiveHeaderMode === '1col'
+               ? 'Cycle header layout mode (current: 1-Col)'
+               : effectiveHeaderMode === 'basic-2col'
+-                ? 'Cycle header layout mode (current: 2-Col)'
++                ? 'Cycle header layout mode (current: 2-Col (Default))'
+                 : 'Cycle header layout mode (current: 1-Line)'
+           }
+         >
+@@ -558,8 +558,8 @@ export function IssueNavigatorBar({
+             className={`navigator-header-mode-btn ${effectiveHeaderMode === 'basic-2col' ? 'navigator-header-mode-btn--active' : ''}`}
+             data-testid="header-mode-basic-2col-btn"
+             aria-pressed={effectiveHeaderMode === 'basic-2col'}
+-            title="Basic (2col): 2-column header with basic search and compact filter pills"
+-            aria-label="Basic (2-column)"
++            title="Basic (2col): 2-column header with basic search and compact filter pills (Default)"
++            aria-label="Basic (2-column) (Default)"
+             onClick={() => {
+               handleHeaderModeSelect('basic-2col');
+             }}
+diff --git a/kanban/web/src/features/views/StateFilterPopover.test.tsx b/kanban/web/src/features/views/StateFilterPopover.test.tsx
+index f8277327..fbb50a26 100644
+--- a/kanban/web/src/features/views/StateFilterPopover.test.tsx
++++ b/kanban/web/src/features/views/StateFilterPopover.test.tsx
+@@ -84,6 +84,11 @@ describe('StateFilterPopover (KAN-308 Problem 2)', () => {
+     expect(screen.getByTestId('state-filter-group-actionable')).toBeDefined();
+     expect(screen.getByTestId('state-filter-group-closed')).toBeDefined();
+ 
++    // Default indication on Actionable preset (KAN-478)
++    const actionablePreset = screen.getByTestId('state-preset-actionable');
++    expect(actionablePreset.textContent).toBe('Actionable (Default)');
++    expect(actionablePreset.getAttribute('aria-pressed')).toBe('true');
++
+     // Actionable checkboxes are checked by default (including Crazy_Ideas); Closed are unchecked
+     expect(screen.getByTestId<HTMLInputElement>('state-checkbox-st-backlog').checked).toBe(true);
+     expect(screen.getByTestId<HTMLInputElement>('state-checkbox-st-todo').checked).toBe(true);
+@@ -191,11 +196,86 @@ describe('StateFilterPopover (KAN-308 Problem 2)', () => {
+ 
+     // Reopen and close via outside pointerdown
+     fireEvent.click(trigger);
++    const popover = screen.getByTestId('navigator-state-popover');
++    expect(popover).toBeDefined();
++
++    // Pointerdown inside container does not close
++    fireEvent.pointerDown(popover);
+     expect(screen.getByTestId('navigator-state-popover')).toBeDefined();
++
++    // Arrow keys when activeElement is not a focusable (e.g. popover container itself)
++    popover.focus();
++    fireEvent.keyDown(popover, { key: 'ArrowDown' });
++    fireEvent.keyDown(popover, { key: 'ArrowUp' });
++    // Non-navigational key does nothing
++    fireEvent.keyDown(popover, { key: 'Enter' });
++
++    // Pointerdown outside closes
+     fireEvent.pointerDown(screen.getByTestId('outside-btn'));
+     expect(screen.queryByTestId('navigator-state-popover')).toBeNull();
+   });
+ 
++  it('matches issues by explicit state_id or ignores unmatched states gracefully', () => {
++    const onChange = vi.fn();
++    render(
++      <StateFilterPopover
++        value={createActionableStateFilterPreference()}
++        onChange={onChange}
++        issues={[
++          {
++            id: 'i-explicit',
++            key: 'KAN-EXP',
++            summary: 'Explicit state_id match',
++            state_id: 'state-todo',
++            priority: { slug: 'low', label: 'Low' },
++          } as unknown as IssueItem,
++          {
++            id: 'i-bare',
++            key: 'KAN-BARE',
++            summary: 'Bare issue without state',
++          } as unknown as IssueItem,
++          {
++            id: 'i-nostatename',
++            key: 'KAN-NONAME',
++            summary: 'Issue with state lacking name',
++            state: { id: 'some-id' } as unknown as StateSummary,
++          } as unknown as IssueItem,
++          {
++            id: 'i-unknown',
++            key: 'KAN-UNK',
++            summary: 'Unknown state',
++            state: { id: 'unknown-id', name: 'Unknown State', group: 'backlog' },
++            priority: { slug: 'low', label: 'Low' },
++          },
++        ]}
++      />,
++    );
++    fireEvent.click(screen.getByTestId('navigator-filter-state'));
++    expect(screen.getByTestId('state-count-state-todo').textContent).toBe('1');
++  });
++
++  it('indicates default value on Actionable preset button (KAN-478)', () => {
++    render(<ControlledHarness />);
++    fireEvent.click(screen.getByTestId('navigator-filter-state'));
++    const actionableBtn = screen.getByTestId('state-preset-actionable');
++    expect(actionableBtn.textContent).toBe('Actionable (Default)');
++    expect(actionableBtn.getAttribute('aria-pressed')).toBe('true');
++  });
++
++  it('handles arrow key cycling when search results are empty', () => {
++    render(<ControlledHarness />);
++    fireEvent.click(screen.getByTestId('navigator-filter-state'));
++    const searchInput = screen.getByTestId<HTMLInputElement>('state-filter-search-input');
++    fireEvent.change(searchInput, { target: { value: 'nomatchhereatall' } });
++    expect(screen.getByTestId('state-filter-empty')).toBeDefined();
++
++    const dialog = screen.getByTestId('navigator-state-popover');
++    fireEvent.keyDown(dialog, { key: 'ArrowDown' });
++    expect(document.activeElement).toBe(searchInput);
++    fireEvent.keyDown(dialog, { key: 'ArrowUp' });
++    expect(document.activeElement).toBe(searchInput);
++  });
++
+   it('falls back to DEFAULT_WORKFLOW_STATES when projectStates is omitted and sorts ties by name', () => {
+     const tiedStates: StateSummary[] = [
+       { id: 's-b', name: 'Beta', group: 'unstarted' },
+diff --git a/kanban/web/src/features/views/StateFilterPopover.tsx b/kanban/web/src/features/views/StateFilterPopover.tsx
+index 65392b14..e043610d 100644
+--- a/kanban/web/src/features/views/StateFilterPopover.tsx
++++ b/kanban/web/src/features/views/StateFilterPopover.tsx
+@@ -317,7 +317,7 @@ export function StateFilterPopover({
+                 handleSelectPreset('actionable');
+               }}
+             >
+-              Actionable
++              Actionable (Default)
+             </button>
+             <button
+               type="button"

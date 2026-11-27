@@ -376,14 +376,14 @@ export function IssueNavigatorBar({
             effectiveHeaderMode === '1col'
               ? 'Header layout: Compact 1-Column (click to expand to 2-Column)'
               : effectiveHeaderMode === 'basic-2col'
-                ? 'Header layout: Expanded 2-Column (click for 1-Line compact)'
+                ? 'Header layout: Expanded 2-Column (Default) (click for 1-Line compact)'
                 : 'Header layout: Single-Line (click to contract to 1-Column)'
           }
           aria-label={
             effectiveHeaderMode === '1col'
               ? 'Cycle header layout mode (current: 1-Col)'
               : effectiveHeaderMode === 'basic-2col'
-                ? 'Cycle header layout mode (current: 2-Col)'
+                ? 'Cycle header layout mode (current: 2-Col (Default))'
                 : 'Cycle header layout mode (current: 1-Line)'
           }
         >
@@ -558,8 +558,8 @@ export function IssueNavigatorBar({
             className={`navigator-header-mode-btn ${effectiveHeaderMode === 'basic-2col' ? 'navigator-header-mode-btn--active' : ''}`}
             data-testid="header-mode-basic-2col-btn"
             aria-pressed={effectiveHeaderMode === 'basic-2col'}
-            title="Basic (2col): 2-column header with basic search and compact filter pills"
-            aria-label="Basic (2-column)"
+            title="Basic (2col): 2-column header with basic search and compact filter pills (Default)"
+            aria-label="Basic (2-column) (Default)"
             onClick={() => {
               handleHeaderModeSelect('basic-2col');
             }}

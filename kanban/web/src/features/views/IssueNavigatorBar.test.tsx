@@ -557,8 +557,8 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
       // 2. Click 1: transition to basic-2col
       fireEvent.click(toggleBtn);
       expect(toggleBtn.getAttribute('data-header-mode')).toBe('basic-2col');
-      expect(toggleBtn.getAttribute('title')).toBe('Header layout: Expanded 2-Column (click for 1-Line compact)');
-      expect(toggleBtn.getAttribute('aria-label')).toBe('Cycle header layout mode (current: 2-Col)');
+      expect(toggleBtn.getAttribute('title')).toBe('Header layout: Expanded 2-Column (Default) (click for 1-Line compact)');
+      expect(toggleBtn.getAttribute('aria-label')).toBe('Cycle header layout mode (current: 2-Col (Default))');
       expect(toggleBtn.querySelector('.navigator-density-icon--collapse-1line')).not.toBeNull();
       expect(navBar.getAttribute('data-header-mode')).toBe('basic-2col');
       expect(localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY)).toBe('basic-2col');
@@ -849,6 +849,32 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
       // Zero FieldHelpHint or StudioDocLink nested inside <button>...</button>
       expect(source).not.toMatch(/<button\b(?![^>]*\/>)[^>]*>(?:(?!<\/button>)[\s\S])*?<FieldHelpHint/i);
       expect(source).not.toMatch(/<button\b(?![^>]*\/>)[^>]*>(?:(?!<\/button>)[\s\S])*?<StudioDocLink/i);
+    });
+  });
+
+  describe('Header Mode Button Default Values (KAN-478)', () => {
+    it('appends (Default) to title and aria-label of basic-2col button', () => {
+      render(
+        <IssueNavigatorBar
+          projectKey="KAN"
+          issues={mockIssues}
+          headerMode="basic-2col"
+        />,
+      );
+
+      const col2Btn = screen.getByTestId('header-mode-basic-2col-btn');
+      expect(col2Btn.getAttribute('title')).toBe(
+        'Basic (2col): 2-column header with basic search and compact filter pills (Default)',
+      );
+      expect(col2Btn.getAttribute('aria-label')).toBe('Basic (2-column) (Default)');
+
+      const toggleBtn = screen.getByTestId('navigator-header-density-toggle');
+      expect(toggleBtn.getAttribute('title')).toBe(
+        'Header layout: Expanded 2-Column (Default) (click for 1-Line compact)',
+      );
+      expect(toggleBtn.getAttribute('aria-label')).toBe(
+        'Cycle header layout mode (current: 2-Col (Default))',
+      );
     });
   });
 });

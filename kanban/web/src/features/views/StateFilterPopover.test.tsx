@@ -84,6 +84,11 @@ describe('StateFilterPopover (KAN-308 Problem 2)', () => {
     expect(screen.getByTestId('state-filter-group-actionable')).toBeDefined();
     expect(screen.getByTestId('state-filter-group-closed')).toBeDefined();
 
+    // Default indication on Actionable preset (KAN-478)
+    const actionablePreset = screen.getByTestId('state-preset-actionable');
+    expect(actionablePreset.textContent).toBe('Actionable (Default)');
+    expect(actionablePreset.getAttribute('aria-pressed')).toBe('true');
+
     // Actionable checkboxes are checked by default (including Crazy_Ideas); Closed are unchecked
     expect(screen.getByTestId<HTMLInputElement>('state-checkbox-st-backlog').checked).toBe(true);
     expect(screen.getByTestId<HTMLInputElement>('state-checkbox-st-todo').checked).toBe(true);
@@ -191,9 +196,84 @@ describe('StateFilterPopover (KAN-308 Problem 2)', () => {
 
     // Reopen and close via outside pointerdown
     fireEvent.click(trigger);
+    const popover = screen.getByTestId('navigator-state-popover');
+    expect(popover).toBeDefined();
+
+    // Pointerdown inside container does not close
+    fireEvent.pointerDown(popover);
     expect(screen.getByTestId('navigator-state-popover')).toBeDefined();
+
+    // Arrow keys when activeElement is not a focusable (e.g. popover container itself)
+    popover.focus();
+    fireEvent.keyDown(popover, { key: 'ArrowDown' });
+    fireEvent.keyDown(popover, { key: 'ArrowUp' });
+    // Non-navigational key does nothing
+    fireEvent.keyDown(popover, { key: 'Enter' });
+
+    // Pointerdown outside closes
     fireEvent.pointerDown(screen.getByTestId('outside-btn'));
     expect(screen.queryByTestId('navigator-state-popover')).toBeNull();
+  });
+
+  it('matches issues by explicit state_id or ignores unmatched states gracefully', () => {
+    const onChange = vi.fn();
+    render(
+      <StateFilterPopover
+        value={createActionableStateFilterPreference()}
+        onChange={onChange}
+        issues={[
+          {
+            id: 'i-explicit',
+            key: 'KAN-EXP',
+            summary: 'Explicit state_id match',
+            state_id: 'state-todo',
+            priority: { slug: 'low', label: 'Low' },
+          } as unknown as IssueItem,
+          {
+            id: 'i-bare',
+            key: 'KAN-BARE',
+            summary: 'Bare issue without state',
+          } as unknown as IssueItem,
+          {
+            id: 'i-nostatename',
+            key: 'KAN-NONAME',
+            summary: 'Issue with state lacking name',
+            state: { id: 'some-id' } as unknown as StateSummary,
+          } as unknown as IssueItem,
+          {
+            id: 'i-unknown',
+            key: 'KAN-UNK',
+            summary: 'Unknown state',
+            state: { id: 'unknown-id', name: 'Unknown State', group: 'backlog' },
+            priority: { slug: 'low', label: 'Low' },
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('navigator-filter-state'));
+    expect(screen.getByTestId('state-count-state-todo').textContent).toBe('1');
+  });
+
+  it('indicates default value on Actionable preset button (KAN-478)', () => {
+    render(<ControlledHarness />);
+    fireEvent.click(screen.getByTestId('navigator-filter-state'));
+    const actionableBtn = screen.getByTestId('state-preset-actionable');
+    expect(actionableBtn.textContent).toBe('Actionable (Default)');
+    expect(actionableBtn.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('handles arrow key cycling when search results are empty', () => {
+    render(<ControlledHarness />);
+    fireEvent.click(screen.getByTestId('navigator-filter-state'));
+    const searchInput = screen.getByTestId<HTMLInputElement>('state-filter-search-input');
+    fireEvent.change(searchInput, { target: { value: 'nomatchhereatall' } });
+    expect(screen.getByTestId('state-filter-empty')).toBeDefined();
+
+    const dialog = screen.getByTestId('navigator-state-popover');
+    fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(searchInput);
+    fireEvent.keyDown(dialog, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(searchInput);
   });
 
   it('falls back to DEFAULT_WORKFLOW_STATES when projectStates is omitted and sorts ties by name', () => {
