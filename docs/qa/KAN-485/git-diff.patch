@@ -1,0 +1,649 @@
+diff --git a/kanban/web/src/features/table/ColumnConfigurator.test.tsx b/kanban/web/src/features/table/ColumnConfigurator.test.tsx
+index d5aea97d..43e53bb7 100644
+--- a/kanban/web/src/features/table/ColumnConfigurator.test.tsx
++++ b/kanban/web/src/features/table/ColumnConfigurator.test.tsx
+@@ -1,8 +1,14 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+ import React from 'react';
++import fs from 'node:fs';
++import path from 'node:path';
+ import { ColumnConfigurator } from './ColumnConfigurator';
+ import { getDefaultColumns, type TableColumnId } from './tableColumns';
++import { ShellPanelsProvider, registerShellPanel, useShellPanels } from '../../app/shellPanels';
+ 
+ describe('ColumnConfigurator', () => {
+   beforeEach(() => {
+@@ -160,4 +166,352 @@ describe('ColumnConfigurator', () => {
+     const trigger = screen.getByRole('button', { name: /Columns/i });
+     expect(trigger.textContent).toContain(`Columns (${String(defaultCols.length)}/12)`);
+   });
++
++  describe('StudioDocLink Header Integration (KAN-485)', () => {
++    it('renders StudioDocLink in configurator header pointing to table view and column customization guide', () => {
++      const defaultCols = getDefaultColumns(true);
++      render(
++        <ColumnConfigurator
++          columns={defaultCols}
++          onChange={vi.fn()}
++          projectKey="KAN"
++        />
++      );
++
++      fireEvent.click(screen.getByRole('button', { name: /Columns/i }));
++
++      const docLink = screen.getByTestId('column-config-doc-link');
++      expect(docLink).toBeDefined();
++      expect(docLink.getAttribute('href')).toBe(
++        '/docs/enterprise-whitespace-and-kanban-board#table-view-and-column-customization'
++      );
++      expect(docLink.textContent).toContain('Columns Guide ->');
++      expect(docLink.className).toContain('kb-studio-doc-link');
++
++      // HTML 4.10.4: Not nested in a button or label
++      expect(docLink.closest('button')).toBeNull();
++      expect(docLink.closest('label')).toBeNull();
++    });
++
++    it('opens HelpDrawer when StudioDocLink is clicked inside ShellPanelsProvider', () => {
++      let panelOpened = false;
++      let panelArg: unknown = null;
++      const unregister = registerShellPanel('help', () => <div data-testid="mock-help-panel" />);
++
++      function PanelWatcher() {
++        const { activePanel } = useShellPanels();
++        if (activePanel?.id === 'help') {
++          panelOpened = true;
++          panelArg = activePanel.arg;
++        }
++        return <div data-testid="panel-watcher" />;
++      }
++
++      const defaultCols = getDefaultColumns(true);
++      render(
++        <ShellPanelsProvider>
++          <PanelWatcher />
++          <ColumnConfigurator
++            columns={defaultCols}
++            onChange={vi.fn()}
++            projectKey="KAN"
++          />
++        </ShellPanelsProvider>
++      );
++
++      fireEvent.click(screen.getByRole('button', { name: /Columns/i }));
++      const docLink = screen.getByTestId('column-config-doc-link');
++      fireEvent.click(docLink);
++
++      expect(panelOpened).toBe(true);
++      expect(panelArg).toEqual({
++        href: '/docs/enterprise-whitespace-and-kanban-board#table-view-and-column-customization',
++        title: 'Columns Guide ->',
++      });
++
++      unregister();
++    });
++  });
++
++  describe('FieldHelpHint Pinned Columns Integration (KAN-485)', () => {
++    it('renders FieldHelpHint as a sibling to label in locked Key column and satisfies HTML 4.10.4', () => {
++      const defaultCols = getDefaultColumns(true);
++      const { container } = render(
++        <ColumnConfigurator
++          columns={defaultCols}
++          onChange={vi.fn()}
++          projectKey="KAN"
++        />
++      );
++
++      fireEvent.click(screen.getByRole('button', { name: /Columns/i }));
++
++      const helpTrigger = screen.getByTestId('pinned-columns-help');
++      expect(helpTrigger).toBeDefined();
++
++      // HTML 4.10.4: NEVER nested in label or button
++      expect(helpTrigger.closest('label')).toBeNull();
++      expect(helpTrigger.closest('button.column-configurator-trigger')).toBeNull();
++
++      // Sibling inside the item row
++      const keyRow = helpTrigger.closest('.column-configurator-item');
++      expect(keyRow?.getAttribute('data-col-id')).toBe('key');
++      expect(keyRow?.querySelector('label.column-configurator-item-left')).not.toBeNull();
++
++      // Strict check: zero nested buttons in labels or buttons
++      const invalidNestedButtons = container.querySelectorAll(
++        'label button.field-help-hint, button button.field-help-hint, label a.kb-studio-doc-link, button a.kb-studio-doc-link'
++      );
++      expect(invalidNestedButtons.length).toBe(0);
++      expect(
++        document.querySelectorAll(
++          'label button.field-help-hint, button button.field-help-hint, label a.kb-studio-doc-link, button a.kb-studio-doc-link'
++        ).length
++      ).toBe(0);
++    });
++
++    it('opens FieldHelpHint popover and verifies summary, defaultValue, validValues, and docHref', async () => {
++      const defaultCols = getDefaultColumns(true);
++      render(
++        <ColumnConfigurator
++          columns={defaultCols}
++          onChange={vi.fn()}
++          projectKey="KAN"
++        />
++      );
++
++      fireEvent.click(screen.getByRole('button', { name: /Columns/i }));
++
++      const helpTrigger = screen.getByTestId('pinned-columns-help');
++      fireEvent.click(helpTrigger);
++
++      await waitFor(() => {
++        expect(
++          screen.getByText(
++            'Identifier and Summary columns are permanently pinned to provide consistent issue identification and navigation.'
++          )
++        ).toBeDefined();
++      });
++
++      // Default value: Pinned (Identifier, Summary)
++      expect(screen.getByTestId('pinned-columns-help-default')).toBeDefined();
++      expect(
++        within(screen.getByTestId('pinned-columns-help-default')).getByText('Pinned (Identifier, Summary)')
++      ).toBeDefined();
++
++      // Valid values list
++      expect(
++        screen.getByText('Immutable unique project issue tracking key.')
++      ).toBeDefined();
++      expect(
++        screen.getByText('Primary headline describing the work item.')
++      ).toBeDefined();
++
++      // Wiki documentation link in popover
++      const popoverDocLink = screen.getByTestId('pinned-columns-help-doc-link');
++      expect(popoverDocLink.getAttribute('href')).toBe(
++        '/docs/enterprise-whitespace-and-kanban-board#table-view-and-column-customization'
++      );
++    });
++  });
++
++  describe('Escape and Outside Click Yielding (KAN-485)', () => {
++    it('ignores non-Escape keydown events', () => {
++      const defaultCols = getDefaultColumns(true);
++      render(
++        <ColumnConfigurator
++          columns={defaultCols}
++          onChange={vi.fn()}
++          projectKey="KAN"
++        />
++      );
++
++      fireEvent.click(screen.getByRole('button', { name: /Columns/i }));
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++
++      fireEvent.keyDown(window, { key: 'Tab' });
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++    });
++
++    it('closes dialog on Escape when neither help drawer nor field help popover is open', () => {
++      const defaultCols = getDefaultColumns(true);
++      render(
++        <ColumnConfigurator
++          columns={defaultCols}
++          onChange={vi.fn()}
++          projectKey="KAN"
++        />
++      );
++
++      fireEvent.click(screen.getByRole('button', { name: /Columns/i }));
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++
++      // Press Escape
++      fireEvent.keyDown(window, { key: 'Escape' });
++      expect(screen.queryByRole('dialog', { name: /Configure table columns/i })).toBeNull();
++    });
++
++    it('yields Escape when .field-help-hint-popover is present in the DOM', () => {
++      const defaultCols = getDefaultColumns(true);
++      render(
++        <ColumnConfigurator
++          columns={defaultCols}
++          onChange={vi.fn()}
++          projectKey="KAN"
++        />
++      );
++
++      fireEvent.click(screen.getByRole('button', { name: /Columns/i }));
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++
++      // Create a mock .field-help-hint-popover in the DOM
++      const mockPopover = document.createElement('div');
++      mockPopover.className = 'field-help-hint-popover';
++      document.body.appendChild(mockPopover);
++
++      // Press Escape -> must yield and NOT close ColumnConfigurator
++      fireEvent.keyDown(window, { key: 'Escape' });
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++
++      // Clean up mock popover
++      document.body.removeChild(mockPopover);
++
++      // Now pressing Escape closes ColumnConfigurator
++      fireEvent.keyDown(window, { key: 'Escape' });
++      expect(screen.queryByRole('dialog', { name: /Configure table columns/i })).toBeNull();
++    });
++
++    it('yields Escape when .kb-help-drawer is present in the DOM', () => {
++      const defaultCols = getDefaultColumns(true);
++      render(
++        <ColumnConfigurator
++          columns={defaultCols}
++          onChange={vi.fn()}
++          projectKey="KAN"
++        />
++      );
++
++      fireEvent.click(screen.getByRole('button', { name: /Columns/i }));
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++
++      // Create a mock .kb-help-drawer in the DOM
++      const mockDrawer = document.createElement('div');
++      mockDrawer.className = 'kb-help-drawer';
++      document.body.appendChild(mockDrawer);
++
++      // Press Escape -> must yield and NOT close ColumnConfigurator
++      fireEvent.keyDown(window, { key: 'Escape' });
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++
++      // Clean up mock drawer
++      document.body.removeChild(mockDrawer);
++
++      // Now pressing Escape closes ColumnConfigurator
++      fireEvent.keyDown(window, { key: 'Escape' });
++      expect(screen.queryByRole('dialog', { name: /Configure table columns/i })).toBeNull();
++    });
++
++    it('yields outside-click when clicking inside .kb-help-drawer or .kb-help-drawer-backdrop', () => {
++      const defaultCols = getDefaultColumns(true);
++      render(
++        <ColumnConfigurator
++          columns={defaultCols}
++          onChange={vi.fn()}
++          projectKey="KAN"
++        />
++      );
++
++      fireEvent.click(screen.getByRole('button', { name: /Columns/i }));
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++
++      // Create mock help drawer and backdrop
++      const mockBackdrop = document.createElement('div');
++      mockBackdrop.className = 'kb-help-drawer-backdrop';
++      const mockDrawer = document.createElement('div');
++      mockDrawer.className = 'kb-help-drawer';
++      document.body.appendChild(mockBackdrop);
++      document.body.appendChild(mockDrawer);
++
++      // Click on drawer -> yields
++      fireEvent.mouseDown(mockDrawer);
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++
++      // Click on backdrop -> yields
++      fireEvent.mouseDown(mockBackdrop);
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++
++      // Clean up
++      document.body.removeChild(mockDrawer);
++      document.body.removeChild(mockBackdrop);
++
++      // Click on body -> closes dialog
++      fireEvent.mouseDown(document.body);
++      expect(screen.queryByRole('dialog', { name: /Configure table columns/i })).toBeNull();
++    });
++
++    it('yields outside-click when clicking inside or while .field-help-hint-popover is open', () => {
++      const defaultCols = getDefaultColumns(true);
++      render(
++        <ColumnConfigurator
++          columns={defaultCols}
++          onChange={vi.fn()}
++          projectKey="KAN"
++        />
++      );
++
++      fireEvent.click(screen.getByRole('button', { name: /Columns/i }));
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++
++      // Create mock popover
++      const mockPopover = document.createElement('div');
++      mockPopover.className = 'field-help-hint-popover';
++      document.body.appendChild(mockPopover);
++
++      // Click on popover -> yields
++      fireEvent.mouseDown(mockPopover);
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++
++      // Click on outside while popover is in DOM -> yields
++      fireEvent.mouseDown(document.body);
++      expect(screen.getByRole('dialog', { name: /Configure table columns/i })).toBeDefined();
++
++      // Clean up popover
++      document.body.removeChild(mockPopover);
++
++      // Now click on body closes
++      fireEvent.mouseDown(document.body);
++      expect(screen.queryByRole('dialog', { name: /Configure table columns/i })).toBeNull();
++    });
++  });
++
++  describe('Shift-Left Static & CSS Invariants (KAN-485)', () => {
++    it('enforces static AST invariants: zero inline style props and zero nested controls', () => {
++      const source = fs.readFileSync(path.resolve(__dirname, 'ColumnConfigurator.tsx'), 'utf8');
++
++      // Zero inline style props
++      expect(source).not.toMatch(/style\s*=\s*\{\{/);
++
++      // Zero FieldHelpHint nested inside <label>
++      expect(source).not.toMatch(/<label[^>]*>(?:(?!<\/label>)[\s\S])*?<FieldHelpHint/i);
++
++      // Zero FieldHelpHint nested inside <button>
++      expect(source).not.toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*?<FieldHelpHint/i);
++
++      // Zero StudioDocLink nested inside <label>
++      expect(source).not.toMatch(/<label[^>]*>(?:(?!<\/label>)[\s\S])*?<StudioDocLink/i);
++
++      // Zero StudioDocLink nested inside <button>
++      expect(source).not.toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*?<StudioDocLink/i);
++    });
++
++    it('verifies listTable.css includes responsive and touch target rules for ColumnConfigurator', () => {
++      const cssPath = path.resolve(__dirname, '../views/listTable.css');
++      const css = fs.readFileSync(cssPath, 'utf8');
++
++      expect(css).toContain('.column-configurator-container');
++      expect(css).toContain('.column-configurator-dialog');
++      expect(css).toContain('min-height: var(--tap-min, 44px)');
++      expect(css).toContain('max-width: calc(100vw - 24px)');
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/table/ColumnConfigurator.tsx b/kanban/web/src/features/table/ColumnConfigurator.tsx
+index 995cf93f..ca96165b 100644
+--- a/kanban/web/src/features/table/ColumnConfigurator.tsx
++++ b/kanban/web/src/features/table/ColumnConfigurator.tsx
+@@ -7,6 +7,8 @@ import {
+   reorderColumn,
+   toggleColumn,
+ } from './tableColumns';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
+ 
+ export interface ColumnConfiguratorProps {
+   columns: TableColumnId[];
+@@ -36,19 +38,46 @@ export function ColumnConfigurator({
+ 
+   useEffect(() => {
+     function handleClickOutside(event: MouseEvent) {
++      const target = event.target as Node | null;
++      if (
++        document.querySelector(
++          '.kb-help-drawer, .kb-help-drawer-backdrop, .field-help-hint-popover'
++        ) ||
++        (target instanceof Element &&
++          target.closest(
++            '.kb-help-drawer, .kb-help-drawer-backdrop, .field-help-hint-popover'
++          ))
++      ) {
++        return;
++      }
+       if (
+         containerRef.current &&
+-        !containerRef.current.contains(event.target as Node)
++        !containerRef.current.contains(target)
+       ) {
+         setIsOpen(false);
+       }
+     }
+ 
++    function handleKeyDown(event: KeyboardEvent) {
++      if (event.key === 'Escape') {
++        if (
++          document.querySelector(
++            '.kb-help-drawer, .kb-help-drawer-backdrop, .field-help-hint-popover'
++          )
++        ) {
++          return;
++        }
++        setIsOpen(false);
++      }
++    }
++
+     if (isOpen) {
+       document.addEventListener('mousedown', handleClickOutside);
++      window.addEventListener('keydown', handleKeyDown);
+     }
+     return () => {
+       document.removeEventListener('mousedown', handleClickOutside);
++      window.removeEventListener('keydown', handleKeyDown);
+     };
+   }, [isOpen]);
+ 
+@@ -89,7 +118,14 @@ export function ColumnConfigurator({
+           className="column-configurator-dialog"
+         >
+           <div className="column-configurator-header">
+-            <span>Configure Columns</span>
++            <div className="column-configurator-header-title-wrap">
++              <span>Configure Columns</span>
++              <StudioDocLink
++                href="/docs/enterprise-whitespace-and-kanban-board#table-view-and-column-customization"
++                label="Columns Guide ->"
++                testId="column-config-doc-link"
++              />
++            </div>
+             <button
+               type="button"
+               className="column-configurator-btn-move"
+@@ -126,6 +162,21 @@ export function ColumnConfigurator({
+                     <span>{col.label}</span>
+                   </label>
+ 
++                  {isLocked && col.id === 'key' && (
++                    <FieldHelpHint
++                      title="Pinned Columns"
++                      summary="Identifier and Summary columns are permanently pinned to provide consistent issue identification and navigation."
++                      defaultValue="Pinned (Identifier, Summary)"
++                      validValues={[
++                        { label: 'Identifier (Key)', description: 'Immutable unique project issue tracking key.' },
++                        { label: 'Summary', description: 'Primary headline describing the work item.' },
++                      ]}
++                      docHref="/docs/enterprise-whitespace-and-kanban-board#table-view-and-column-customization"
++                      testId="pinned-columns-help"
++                      ariaLabel="Why Key and Summary are pinned"
++                    />
++                  )}
++
+                   {isVisible && !isLocked && (
+                     <div className="column-configurator-item-actions">
+                       <button
+diff --git a/kanban/web/src/features/views/listTable.css b/kanban/web/src/features/views/listTable.css
+index 3c76eb26..95004114 100644
+--- a/kanban/web/src/features/views/listTable.css
++++ b/kanban/web/src/features/views/listTable.css
+@@ -273,7 +273,8 @@
+   background: var(--bg-surface);
+   border: 1px solid var(--border-subtle);
+   border-radius: var(--radius-lg, 10px);
+-  overflow: hidden;
++  overflow: visible;
++  position: relative;
+ }
+ 
+ .table-toolbar {
+@@ -522,6 +523,10 @@
+    Column Configurator Popover Dialog (S6.4, S7.2 8f)
+    ========================================================================== */
+ 
++.column-configurator-container {
++  position: relative;
++}
++
+ .column-configurator-trigger {
+   display: inline-flex;
+   align-items: center;
+@@ -535,6 +540,7 @@
+   font-weight: 500;
+   color: var(--fg-primary);
+   cursor: pointer;
++  min-height: 32px;
+ }
+ 
+ .column-configurator-trigger:hover {
+@@ -548,10 +554,11 @@
+ 
+ .column-configurator-dialog {
+   position: absolute;
+-  top: 48px;
+-  right: var(--space-4, 16px);
+-  z-index: 10;
+-  width: 280px;
++  top: calc(100% + var(--space-2, 8px));
++  right: 0;
++  z-index: 100;
++  width: min(380px, calc(100vw - 24px));
++  max-width: calc(100vw - 24px);
+   background: var(--bg-surface);
+   border: 1px solid var(--border-strong);
+   border-radius: var(--radius-lg, 10px);
+@@ -560,17 +567,33 @@
+   display: flex;
+   flex-direction: column;
+   gap: var(--space-2, 8px);
++  box-sizing: border-box;
+ }
+ 
+ .column-configurator-header {
+   display: flex;
+-  align-items: center;
++  align-items: flex-start;
+   justify-content: space-between;
++  gap: var(--space-2, 8px);
+   padding-bottom: var(--space-2, 8px);
+   border-bottom: 1px solid var(--border-subtle);
+   font-weight: 600;
+   font-size: 0.875rem;
+   color: var(--fg-primary);
++  flex-wrap: nowrap;
++}
++
++.column-configurator-header .column-configurator-btn-move {
++  flex-shrink: 0;
++}
++
++.column-configurator-header-title-wrap {
++  flex: 1;
++  min-width: 0;
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  flex-wrap: wrap;
+ }
+ 
+ .column-configurator-list {
+@@ -585,9 +608,11 @@
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
++  gap: var(--space-2, 8px);
+   padding: 4px 6px;
+   border-radius: var(--radius-sm, 4px);
+   font-size: 0.8125rem;
++  min-height: 32px;
+ }
+ 
+ .column-configurator-item:hover {
+@@ -646,6 +671,80 @@
+   color: var(--fg-primary);
+ }
+ 
++@media (max-width: 767px) {
++  .column-configurator-trigger {
++    min-height: var(--tap-min, 44px);
++    padding: 8px 12px;
++  }
++
++  .column-configurator-dialog {
++    position: fixed;
++    left: var(--space-3, 12px);
++    right: var(--space-3, 12px);
++    top: 88px;
++    width: auto;
++    max-width: none;
++    max-height: calc(100dvh - 112px);
++    display: flex;
++    flex-direction: column;
++  }
++
++  .column-configurator-list {
++    flex: 1 1 auto;
++    min-height: 0;
++    max-height: none;
++    overflow-y: auto;
++  }
++
++  .column-configurator-item {
++    min-height: var(--tap-min, 44px);
++    padding: 6px 8px;
++  }
++
++  .column-configurator-item-left {
++    min-height: var(--tap-min, 44px);
++  }
++
++  .column-configurator-btn-move {
++    min-width: var(--tap-min, 44px);
++    min-height: var(--tap-min, 44px);
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    font-size: 0.875rem;
++  }
++
++  .column-configurator-reset {
++    min-height: var(--tap-min, 44px);
++    display: flex;
++    align-items: center;
++    justify-content: center;
++  }
++}
++
++@media (pointer: coarse) {
++  .column-configurator-trigger {
++    min-height: var(--tap-min, 44px);
++  }
++
++  .column-configurator-item {
++    min-height: var(--tap-min, 44px);
++  }
++
++  .column-configurator-item-left {
++    min-height: var(--tap-min, 44px);
++  }
++
++  .column-configurator-btn-move {
++    min-width: var(--tap-min, 44px);
++    min-height: var(--tap-min, 44px);
++  }
++
++  .column-configurator-reset {
++    min-height: var(--tap-min, 44px);
++  }
++}
++
+ /* ==========================================================================
+    Empty State & Pagination (S6.4)
+    ========================================================================== */

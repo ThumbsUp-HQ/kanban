@@ -273,7 +273,8 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg, 10px);
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
 .table-toolbar {
@@ -522,6 +523,10 @@
    Column Configurator Popover Dialog (S6.4, S7.2 8f)
    ========================================================================== */
 
+.column-configurator-container {
+  position: relative;
+}
+
 .column-configurator-trigger {
   display: inline-flex;
   align-items: center;
@@ -535,6 +540,7 @@
   font-weight: 500;
   color: var(--fg-primary);
   cursor: pointer;
+  min-height: 32px;
 }
 
 .column-configurator-trigger:hover {
@@ -548,10 +554,11 @@
 
 .column-configurator-dialog {
   position: absolute;
-  top: 48px;
-  right: var(--space-4, 16px);
-  z-index: 10;
-  width: 280px;
+  top: calc(100% + var(--space-2, 8px));
+  right: 0;
+  z-index: 100;
+  width: min(380px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
   background: var(--bg-surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg, 10px);
@@ -560,17 +567,33 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2, 8px);
+  box-sizing: border-box;
 }
 
 .column-configurator-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: var(--space-2, 8px);
   padding-bottom: var(--space-2, 8px);
   border-bottom: 1px solid var(--border-subtle);
   font-weight: 600;
   font-size: 0.875rem;
   color: var(--fg-primary);
+  flex-wrap: nowrap;
+}
+
+.column-configurator-header .column-configurator-btn-move {
+  flex-shrink: 0;
+}
+
+.column-configurator-header-title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex-wrap: wrap;
 }
 
 .column-configurator-list {
@@ -585,9 +608,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-2, 8px);
   padding: 4px 6px;
   border-radius: var(--radius-sm, 4px);
   font-size: 0.8125rem;
+  min-height: 32px;
 }
 
 .column-configurator-item:hover {
@@ -644,6 +669,80 @@
 .column-configurator-reset:hover {
   background: var(--bg-hover);
   color: var(--fg-primary);
+}
+
+@media (max-width: 767px) {
+  .column-configurator-trigger {
+    min-height: var(--tap-min, 44px);
+    padding: 8px 12px;
+  }
+
+  .column-configurator-dialog {
+    position: fixed;
+    left: var(--space-3, 12px);
+    right: var(--space-3, 12px);
+    top: 88px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - 112px);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .column-configurator-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+  }
+
+  .column-configurator-item {
+    min-height: var(--tap-min, 44px);
+    padding: 6px 8px;
+  }
+
+  .column-configurator-item-left {
+    min-height: var(--tap-min, 44px);
+  }
+
+  .column-configurator-btn-move {
+    min-width: var(--tap-min, 44px);
+    min-height: var(--tap-min, 44px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+  }
+
+  .column-configurator-reset {
+    min-height: var(--tap-min, 44px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+@media (pointer: coarse) {
+  .column-configurator-trigger {
+    min-height: var(--tap-min, 44px);
+  }
+
+  .column-configurator-item {
+    min-height: var(--tap-min, 44px);
+  }
+
+  .column-configurator-item-left {
+    min-height: var(--tap-min, 44px);
+  }
+
+  .column-configurator-btn-move {
+    min-width: var(--tap-min, 44px);
+    min-height: var(--tap-min, 44px);
+  }
+
+  .column-configurator-reset {
+    min-height: var(--tap-min, 44px);
+  }
 }
 
 /* ==========================================================================

@@ -7,6 +7,8 @@ import {
   reorderColumn,
   toggleColumn,
 } from './tableColumns';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 
 export interface ColumnConfiguratorProps {
   columns: TableColumnId[];
@@ -36,19 +38,46 @@ export function ColumnConfigurator({
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node | null;
+      if (
+        document.querySelector(
+          '.kb-help-drawer, .kb-help-drawer-backdrop, .field-help-hint-popover'
+        ) ||
+        (target instanceof Element &&
+          target.closest(
+            '.kb-help-drawer, .kb-help-drawer-backdrop, .field-help-hint-popover'
+          ))
+      ) {
+        return;
+      }
       if (
         containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
+        !containerRef.current.contains(target)
       ) {
+        setIsOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        if (
+          document.querySelector(
+            '.kb-help-drawer, .kb-help-drawer-backdrop, .field-help-hint-popover'
+          )
+        ) {
+          return;
+        }
         setIsOpen(false);
       }
     }
 
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      window.addEventListener('keydown', handleKeyDown);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen]);
 
@@ -89,7 +118,14 @@ export function ColumnConfigurator({
           className="column-configurator-dialog"
         >
           <div className="column-configurator-header">
-            <span>Configure Columns</span>
+            <div className="column-configurator-header-title-wrap">
+              <span>Configure Columns</span>
+              <StudioDocLink
+                href="/docs/enterprise-whitespace-and-kanban-board#table-view-and-column-customization"
+                label="Columns Guide ->"
+                testId="column-config-doc-link"
+              />
+            </div>
             <button
               type="button"
               className="column-configurator-btn-move"
@@ -125,6 +161,21 @@ export function ColumnConfigurator({
                     />
                     <span>{col.label}</span>
                   </label>
+
+                  {isLocked && col.id === 'key' && (
+                    <FieldHelpHint
+                      title="Pinned Columns"
+                      summary="Identifier and Summary columns are permanently pinned to provide consistent issue identification and navigation."
+                      defaultValue="Pinned (Identifier, Summary)"
+                      validValues={[
+                        { label: 'Identifier (Key)', description: 'Immutable unique project issue tracking key.' },
+                        { label: 'Summary', description: 'Primary headline describing the work item.' },
+                      ]}
+                      docHref="/docs/enterprise-whitespace-and-kanban-board#table-view-and-column-customization"
+                      testId="pinned-columns-help"
+                      ariaLabel="Why Key and Summary are pinned"
+                    />
+                  )}
 
                   {isVisible && !isLocked && (
                     <div className="column-configurator-item-actions">
