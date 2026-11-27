@@ -1,0 +1,37 @@
+=== TypeScript Check ===
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan490-0bab1928/kanban/web
+> tsc -b --noEmit
+
+Exit code: 0
+
+=== ESLint Check ===
+Exit code: 0
+
+=== Vite Build ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan490-0bab1928/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 767 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.50 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-DsfS2FG5.css            677.72 kB │ gzip:  94.72 kB
+dist/assets/index-CYpeCE5O.js           3,212.90 kB │ gzip: 890.22 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.35s
+Exit code: 0
+
+=== Docs Taxonomy Check ===
+Auditing documentation taxonomy and link integrity in /home/adamoutler/kanban/thumbs-up-kanban.wiki...
+OK: All documentation taxonomy, title labels, internal anchors, code links, and dashes verified successfully (0 violations).
+Exit code: 0
