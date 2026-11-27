@@ -1,0 +1,120 @@
+diff --git a/kanban/web/src/features/views/CsvImportExportModal.css b/kanban/web/src/features/views/CsvImportExportModal.css
+index bdc4d874..7256429d 100644
+--- a/kanban/web/src/features/views/CsvImportExportModal.css
++++ b/kanban/web/src/features/views/CsvImportExportModal.css
+@@ -111,7 +111,7 @@
+ }
+ 
+ .kb-csv-modal-tab--active {
+-  color: var(--accent-primary, #3b82f6);
++  color: var(--badge-fg, #2563eb);
+   border-bottom-color: var(--accent-primary, #3b82f6);
+   font-weight: 600;
+ }
+@@ -182,6 +182,10 @@
+   cursor: pointer;
+ }
+ 
++.kb-csv-modal-radio-content {
++  display: block;
++}
++
+ .kb-csv-modal-radio-desc {
+   display: block;
+   font-size: 0.75rem;
+@@ -429,4 +433,9 @@
+     min-height: var(--tap-min, 44px);
+     min-width: var(--tap-min, 44px);
+   }
++
++  .kb-csv-btn,
++  .kb-csv-modal-tab {
++    min-height: var(--tap-min, 44px);
++  }
+ }
+diff --git a/kanban/web/src/features/views/CsvImportExportModal.tsx b/kanban/web/src/features/views/CsvImportExportModal.tsx
+index c143078e..ded3cd42 100644
+--- a/kanban/web/src/features/views/CsvImportExportModal.tsx
++++ b/kanban/web/src/features/views/CsvImportExportModal.tsx
+@@ -405,12 +405,12 @@ export function CsvImportExportModal({
+                       onChange={() => { setExportFormat('csv'); }}
+                       data-testid="export-format-csv"
+                     />
+-                    <div>
+-                      <strong>Standard CSV</strong>
++                    <span className="kb-csv-modal-radio-content">
++                      <strong>Standard CSV (Default)</strong>
+                       <span className="kb-csv-modal-radio-desc">
+                         Canonical RFC 4180 UTF-8 formatted CSV with formula-injection neutralization.
+                       </span>
+-                    </div>
++                    </span>
+                   </label>
+ 
+                   <label className="kb-csv-modal-radio-label">
+@@ -422,12 +422,12 @@ export function CsvImportExportModal({
+                       onChange={() => { setExportFormat('zip_csv'); }}
+                       data-testid="export-format-zip"
+                     />
+-                    <div>
++                    <span className="kb-csv-modal-radio-content">
+                       <strong>Password-Protected ZIP (AES-256)</strong>
+                       <span className="kb-csv-modal-radio-desc">
+                         Industry standard AE-2 encrypted container (AES-256-CTR with PBKDF2 and HMAC-SHA256).
+                       </span>
+-                    </div>
++                    </span>
+                   </label>
+                 </div>
+               </div>
+diff --git a/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx b/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx
+index 6b7f0c8b..7c17c1e0 100644
+--- a/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx
++++ b/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx
+@@ -397,4 +397,46 @@ describe('CsvImportExportModal (KAN-316)', () => {
+       expect(onCloseMock).not.toHaveBeenCalled();
+     });
+   });
++
++  describe('KAN-484: Standard CSV (Default) export format indicator', () => {
++    it('renders Standard CSV (Default) label for standard export format radio option', () => {
++      render(<CsvImportExportModal {...defaultProps} initialTab="export" />);
++
++      const defaultLabel = screen.getByText('Standard CSV (Default)');
++      expect(defaultLabel).toBeDefined();
++      expect(defaultLabel.tagName).toBe('STRONG');
++
++      const csvRadio = screen.getByTestId<HTMLInputElement>('export-format-csv');
++      expect(csvRadio.checked).toBe(true);
++      expect(csvRadio.value).toBe('csv');
++    });
++
++    it('preserves default Standard CSV selection unless explicitly switched', () => {
++      render(<CsvImportExportModal {...defaultProps} initialTab="export" />);
++
++      const csvRadio = screen.getByTestId<HTMLInputElement>('export-format-csv');
++      const zipRadio = screen.getByTestId<HTMLInputElement>('export-format-zip');
++
++      expect(csvRadio.checked).toBe(true);
++      expect(zipRadio.checked).toBe(false);
++
++      fireEvent.click(zipRadio);
++      expect(zipRadio.checked).toBe(true);
++      expect(csvRadio.checked).toBe(false);
++
++      fireEvent.click(csvRadio);
++      expect(csvRadio.checked).toBe(true);
++      expect(zipRadio.checked).toBe(false);
++    });
++
++    it('enforces HTML 4.10.4 phrasing content by having no div elements inside labels', () => {
++      const { container } = render(<CsvImportExportModal {...defaultProps} initialTab="export" />);
++      const radioLabels = container.querySelectorAll('.kb-csv-modal-radio-label');
++      expect(radioLabels.length).toBe(2);
++      radioLabels.forEach((label) => {
++        expect(label.querySelectorAll('div').length).toBe(0);
++        expect(label.querySelector('.kb-csv-modal-radio-content')).not.toBeNull();
++      });
++    });
++  });
+ });

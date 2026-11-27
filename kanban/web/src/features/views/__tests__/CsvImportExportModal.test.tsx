@@ -397,4 +397,46 @@ describe('CsvImportExportModal (KAN-316)', () => {
       expect(onCloseMock).not.toHaveBeenCalled();
     });
   });
+
+  describe('KAN-484: Standard CSV (Default) export format indicator', () => {
+    it('renders Standard CSV (Default) label for standard export format radio option', () => {
+      render(<CsvImportExportModal {...defaultProps} initialTab="export" />);
+
+      const defaultLabel = screen.getByText('Standard CSV (Default)');
+      expect(defaultLabel).toBeDefined();
+      expect(defaultLabel.tagName).toBe('STRONG');
+
+      const csvRadio = screen.getByTestId<HTMLInputElement>('export-format-csv');
+      expect(csvRadio.checked).toBe(true);
+      expect(csvRadio.value).toBe('csv');
+    });
+
+    it('preserves default Standard CSV selection unless explicitly switched', () => {
+      render(<CsvImportExportModal {...defaultProps} initialTab="export" />);
+
+      const csvRadio = screen.getByTestId<HTMLInputElement>('export-format-csv');
+      const zipRadio = screen.getByTestId<HTMLInputElement>('export-format-zip');
+
+      expect(csvRadio.checked).toBe(true);
+      expect(zipRadio.checked).toBe(false);
+
+      fireEvent.click(zipRadio);
+      expect(zipRadio.checked).toBe(true);
+      expect(csvRadio.checked).toBe(false);
+
+      fireEvent.click(csvRadio);
+      expect(csvRadio.checked).toBe(true);
+      expect(zipRadio.checked).toBe(false);
+    });
+
+    it('enforces HTML 4.10.4 phrasing content by having no div elements inside labels', () => {
+      const { container } = render(<CsvImportExportModal {...defaultProps} initialTab="export" />);
+      const radioLabels = container.querySelectorAll('.kb-csv-modal-radio-label');
+      expect(radioLabels.length).toBe(2);
+      radioLabels.forEach((label) => {
+        expect(label.querySelectorAll('div').length).toBe(0);
+        expect(label.querySelector('.kb-csv-modal-radio-content')).not.toBeNull();
+      });
+    });
+  });
 });

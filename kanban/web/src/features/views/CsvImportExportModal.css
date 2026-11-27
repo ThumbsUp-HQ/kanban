@@ -111,7 +111,7 @@
 }
 
 .kb-csv-modal-tab--active {
-  color: var(--accent-primary, #3b82f6);
+  color: var(--badge-fg, #2563eb);
   border-bottom-color: var(--accent-primary, #3b82f6);
   font-weight: 600;
 }
@@ -180,6 +180,10 @@
   font-size: 0.875rem;
   color: var(--fg-primary, #1e293b);
   cursor: pointer;
+}
+
+.kb-csv-modal-radio-content {
+  display: block;
 }
 
 .kb-csv-modal-radio-desc {
@@ -428,5 +432,10 @@
   .kb-csv-modal-close-btn {
     min-height: var(--tap-min, 44px);
     min-width: var(--tap-min, 44px);
+  }
+
+  .kb-csv-btn,
+  .kb-csv-modal-tab {
+    min-height: var(--tap-min, 44px);
   }
 }

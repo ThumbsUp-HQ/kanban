@@ -405,12 +405,12 @@ export function CsvImportExportModal({
                       onChange={() => { setExportFormat('csv'); }}
                       data-testid="export-format-csv"
                     />
-                    <div>
-                      <strong>Standard CSV</strong>
+                    <span className="kb-csv-modal-radio-content">
+                      <strong>Standard CSV (Default)</strong>
                       <span className="kb-csv-modal-radio-desc">
                         Canonical RFC 4180 UTF-8 formatted CSV with formula-injection neutralization.
                       </span>
-                    </div>
+                    </span>
                   </label>
 
                   <label className="kb-csv-modal-radio-label">
@@ -422,12 +422,12 @@ export function CsvImportExportModal({
                       onChange={() => { setExportFormat('zip_csv'); }}
                       data-testid="export-format-zip"
                     />
-                    <div>
+                    <span className="kb-csv-modal-radio-content">
                       <strong>Password-Protected ZIP (AES-256)</strong>
                       <span className="kb-csv-modal-radio-desc">
                         Industry standard AE-2 encrypted container (AES-256-CTR with PBKDF2 and HMAC-SHA256).
                       </span>
-                    </div>
+                    </span>
                   </label>
                 </div>
               </div>
