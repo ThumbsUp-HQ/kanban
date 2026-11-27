@@ -2003,5 +2003,93 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
       expect(targetElement?.textContent).toContain('State Deletion and Dependency Remapping');
       unmount();
     });
+
+    it('asserts resolveSectionElement and parseDocHref resolve all Wave B4b docHref targets to real rendered heading IDs (KAN-494)', () => {
+      const waveB4bTargets = [
+        {
+          href: '/docs/enterprise-whitespace-and-kanban-board#saved-views',
+          expectedSlug: 'enterprise-whitespace-and-kanban-board',
+          expectedTargetId: 'saved-views-and-custom-presets',
+          expectedHeadingText: 'Saved Views and Custom Presets',
+        },
+        {
+          href: '/docs/enterprise-whitespace-and-kanban-board#table-view-and-column-customization',
+          expectedSlug: 'enterprise-whitespace-and-kanban-board',
+          expectedTargetId: 'table-view',
+          expectedHeadingText: 'Table View',
+        },
+        {
+          href: '/docs/ticket-screen-and-work-item-features#csv-and-zip-import-and-export',
+          expectedSlug: 'ticket-screen-and-work-item-features',
+          expectedTargetId: 'csv-and-password-protected-zip-aes-256-import-and-export',
+          expectedHeadingText: 'CSV and Password-Protected ZIP (AES-256) Import and Export',
+        },
+        {
+          href: '/docs/ticket-screen-and-work-item-features#search-and-filtering',
+          expectedSlug: 'ticket-screen-and-work-item-features',
+          expectedTargetId: 'overview',
+          expectedHeadingText: 'Overview',
+        },
+        {
+          href: '/docs/ticket-screen-and-work-item-features#quick-create-work-item-modal-c',
+          expectedSlug: 'ticket-screen-and-work-item-features',
+          expectedTargetId: 'quick-create-work-item-modal',
+          expectedHeadingText: 'Quick-Create Work Item Modal',
+        },
+        {
+          href: '/docs/ticket-screen-and-work-item-features#the-960px-ticket-peek-drawer-peek',
+          expectedSlug: 'ticket-screen-and-work-item-features',
+          expectedTargetId: 'the-960px-ticket-peek-drawer',
+          expectedHeadingText: 'The 960px Ticket Peek Drawer',
+        },
+        {
+          href: '/docs/ticket-screen-and-work-item-features#duplication-and-copying',
+          expectedSlug: 'ticket-screen-and-work-item-features',
+          expectedTargetId: 'postgresql-issue-copy-and-deep-subtree-duplication-procedure',
+          expectedHeadingText: 'PostgreSQL Issue Copy and Deep Subtree Duplication Procedure',
+        },
+        {
+          href: '/docs/ticket-screen-and-work-item-features#activity-stream-and-audit-ledger',
+          expectedSlug: 'ticket-screen-and-work-item-features',
+          expectedTargetId: '4-tab-activity-feed-and-audit-history',
+          expectedHeadingText: '4-Tab Activity Feed and Audit History',
+        },
+        {
+          href: '/docs/zero-trust-security-and-access-visibility#effective-resource-access-era-evaluation',
+          expectedSlug: 'zero-trust-security-and-access-visibility',
+          expectedTargetId: 'effective-resource-access-era-evaluation',
+          expectedHeadingText: 'Effective Resource Access (ERA) Evaluation',
+        },
+        {
+          href: '/docs/zero-trust-security-and-access-visibility#universal-access-control-model',
+          expectedSlug: 'zero-trust-security-and-access-visibility',
+          expectedTargetId: 'universal-access-control-model',
+          expectedHeadingText: 'Universal Access Control Model',
+        },
+      ];
+
+      for (const target of waveB4bTargets) {
+        const { slug, anchor } = parseDocHref(target.href);
+        expect(slug).toBe(target.expectedSlug);
+        expect(anchor).toBeDefined();
+        if (!anchor) throw new Error(`Missing anchor for ${target.href}`);
+
+        const chapter = WIKI_CHAPTERS.find((c) => c.slug === slug);
+        expect(chapter, `Chapter for ${target.href} must exist in WIKI_CHAPTERS`).toBeDefined();
+        if (!chapter) throw new Error(`Chapter not found for ${target.href}`);
+
+        const { container, unmount } = render(
+          <DocMarkdownViewer content={chapter.content} />
+        );
+
+        const el = resolveSectionElement(container, anchor);
+        expect(el, `Target element for ${target.href} (#${anchor}) must resolve`).not.toBeNull();
+        expect(el?.id).toBe(target.expectedTargetId);
+        expect(el?.tagName).toMatch(/^H[1-6]$/);
+        expect(el?.textContent).toContain(target.expectedHeadingText);
+
+        unmount();
+      }
+    });
   });
 });

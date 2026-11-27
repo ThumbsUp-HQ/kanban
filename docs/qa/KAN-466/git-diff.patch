@@ -1,0 +1,238 @@
+diff --git a/kanban/web/src/features/reports/ReportExportModal.tsx b/kanban/web/src/features/reports/ReportExportModal.tsx
+index dd18fef0..4dd9609d 100644
+--- a/kanban/web/src/features/reports/ReportExportModal.tsx
++++ b/kanban/web/src/features/reports/ReportExportModal.tsx
+@@ -19,6 +19,8 @@ import {
+   generateReport,
+   type ReportTemplate,
+ } from './reportsApi';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
++import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { ReportTemplateStudioModal } from './ReportTemplateStudioModal';
+ import './reports.css';
+ 
+@@ -239,15 +241,22 @@ export function ReportExportModal({
+             <h2 id="report-export-title" className="reports-modal-title">
+               <span>📄</span> Export Report
+             </h2>
+-            <button
+-              type="button"
+-              className="reports-modal-close-btn"
+-              data-testid="report-export-close-btn"
+-              onClick={onClose}
+-              aria-label="Close"
+-            >
+-              ✕
+-            </button>
++            <div className="reports-modal-header-actions">
++              <StudioDocLink
++                href="/docs/studio-configuration-reference"
++                label="Reports Documentation ->"
++                testId="report-export-doc-link"
++              />
++              <button
++                type="button"
++                className="reports-modal-close-btn"
++                data-testid="report-export-close-btn"
++                onClick={onClose}
++                aria-label="Close"
++              >
++                ✕
++              </button>
++            </div>
+           </div>
+ 
+           <div className="reports-modal-body">
+@@ -336,18 +345,28 @@ export function ReportExportModal({
+ 
+             {/* AES-256 ZIP Password Toggle */}
+             <div className="reports-encryption-box">
+-              <label className="reports-checkbox-row">
+-                <input
+-                  type="checkbox"
+-                  data-testid="reports-zip-toggle"
+-                  className="reports-checkbox"
+-                  checked={isZipEncrypted}
+-                  onChange={(e) => { setIsZipEncrypted(e.target.checked); }}
++              <div className="reports-checkbox-row-wrapper">
++                <label className="reports-checkbox-row" htmlFor="reports-zip-toggle">
++                  <input
++                    id="reports-zip-toggle"
++                    type="checkbox"
++                    data-testid="reports-zip-toggle"
++                    className="reports-checkbox"
++                    checked={isZipEncrypted}
++                    onChange={(e) => { setIsZipEncrypted(e.target.checked); }}
++                  />
++                  <span className="reports-checkbox-label">
++                    🔒 Encrypt report in AES-256 password-protected ZIP archive
++                  </span>
++                </label>
++                <FieldHelpHint
++                  title="Report Encryption"
++                  summary="Encrypts generated report artifacts inside an AES-256 password-protected ZIP archive."
++                  defaultValue="Disabled"
++                  docHref="/docs/studio-configuration-reference"
++                  testId="report-encryption-help-hint"
+                 />
+-                <span className="reports-checkbox-label">
+-                  🔒 Encrypt report in AES-256 password-protected ZIP archive
+-                </span>
+-              </label>
++              </div>
+ 
+               {isZipEncrypted && (
+                 <div className="reports-form-group">
+diff --git a/kanban/web/src/features/reports/__tests__/ReportExportModal.test.tsx b/kanban/web/src/features/reports/__tests__/ReportExportModal.test.tsx
+index e7f53922..343d7111 100644
+--- a/kanban/web/src/features/reports/__tests__/ReportExportModal.test.tsx
++++ b/kanban/web/src/features/reports/__tests__/ReportExportModal.test.tsx
+@@ -731,4 +731,93 @@ describe('ReportExportModal', () => {
+       expect(select.getAttribute('style')).toBeNull();
+     });
+   });
++
++  describe('KAN-466: StudioDocLink and FieldHelpHint integration', () => {
++    it('renders report-export-doc-link with correct href and label in header', async () => {
++      render(
++        <ReportExportModal
++          isOpen={true}
++          onClose={vi.fn()}
++          projectKey="KAN"
++          workspaceSlug="default"
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('report-export-doc-link')).toBeDefined();
++      });
++
++      const docLink = screen.getByTestId('report-export-doc-link');
++      expect(docLink.getAttribute('href')).toBe('/docs/studio-configuration-reference');
++      expect(docLink.textContent).toContain('Reports Documentation ->');
++    });
++
++    it('renders report-encryption-help-hint adjacent to AES-256 checkbox and satisfies HTML 4.10.4', async () => {
++      const { container } = render(
++        <ReportExportModal
++          isOpen={true}
++          onClose={vi.fn()}
++          projectKey="KAN"
++          workspaceSlug="default"
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('report-encryption-help-hint')).toBeDefined();
++      });
++
++      const hintTrigger = screen.getByTestId('report-encryption-help-hint');
++      expect(hintTrigger).toBeDefined();
++
++      // HTML 4.10.4: NEVER nest <FieldHelpHint> inside <label>!
++      const nestedTriggers = container.querySelectorAll('label button.field-help-hint, label .kb-field-help-trigger');
++      expect(nestedTriggers.length).toBe(0);
++
++      // Verify hint is a sibling to the checkbox row inside wrapper
++      const wrapper = hintTrigger.closest('.reports-checkbox-row-wrapper');
++      expect(wrapper).not.toBeNull();
++      const label = wrapper?.querySelector('label.reports-checkbox-row');
++      expect(label).not.toBeNull();
++      expect(label?.contains(hintTrigger)).toBe(false);
++    });
++
++    it('falls back to items[0] when security-assessment-report is not in templates and covers empty param fallback', async () => {
++      const customTemplates: reportsApi.ReportTemplate[] = [
++        {
++          id: 'tpl-custom-1',
++          workspace_id: 'ws-1',
++          slug: 'custom-only-report',
++          name: 'Custom Only Report',
++          is_builtin: false,
++          template_markdown: '# Custom Report',
++          parameters_schema_json: [
++            {
++              name: 'notes',
++              label: 'Audit Notes',
++              type: 'textarea',
++            },
++          ],
++          csv_columns_json: [],
++          allowed_formats: ['PDF'],
++          created_at: '2026-11-22T00:00:00Z',
++          updated_at: '2026-11-22T00:00:00Z',
++        },
++      ];
++      vi.spyOn(reportsApi, 'fetchReportTemplates').mockResolvedValueOnce(customTemplates);
++
++      render(
++        <ReportExportModal
++          isOpen={true}
++          onClose={vi.fn()}
++          projectKey="KAN"
++        />,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('report-param-input-notes')).toBeDefined();
++      });
++      const textarea = screen.getByTestId<HTMLTextAreaElement>('report-param-input-notes');
++      expect(textarea.value).toBe('');
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/reports/reports.css b/kanban/web/src/features/reports/reports.css
+index 8d960b94..fa1e2c9e 100644
+--- a/kanban/web/src/features/reports/reports.css
++++ b/kanban/web/src/features/reports/reports.css
+@@ -56,6 +56,12 @@
+   background-color: var(--bg-surface-raised, #ffffff);
+ }
+ 
++.reports-modal-header-actions {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++}
++
+ .reports-modal-title {
+   margin: 0;
+   font-size: 1.25rem;
+@@ -199,6 +205,13 @@
+   gap: 12px;
+ }
+ 
++.reports-checkbox-row-wrapper {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 8px;
++}
++
+ .reports-checkbox-row {
+   display: flex;
+   align-items: center;
+@@ -416,6 +429,23 @@
+     padding: 14px 16px;
+   }
+ 
++  .reports-modal-header {
++    flex-wrap: wrap;
++    gap: 10px;
++  }
++
++  .reports-modal-header-actions {
++    display: flex;
++    align-items: center;
++    gap: 8px;
++    flex-wrap: wrap;
++  }
++
++  .reports-checkbox-row-wrapper {
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
+   .reports-modal-footer {
+     flex-direction: column-reverse;
+     gap: 12px;

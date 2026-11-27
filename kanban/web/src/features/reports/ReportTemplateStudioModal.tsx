@@ -11,6 +11,7 @@ import { useParams } from 'react-router';
 import { QueryClientContext } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { qk } from '../../api/queryKeys';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { createReportTemplate, type ReportTemplate } from './reportsApi';
 import './reports.css';
 
@@ -221,9 +222,18 @@ export function ReportTemplateStudioModal({
             </div>
 
             <div className="reports-form-group">
-              <label htmlFor="studio-template-editor" className="reports-label">
-                Jinja2 Markdown Template
-              </label>
+              <div className="reports-label-row">
+                <label htmlFor="studio-template-editor" className="reports-label">
+                  Jinja2 Markdown Template
+                </label>
+                <FieldHelpHint
+                  title="Jinja2 Template Syntax"
+                  summary="Accepts standard Jinja2 syntax, loops, and filters. Insert snippets above or write custom Markdown."
+                  example={"{% for issue in issues %}\n## {{ issue.identifier }}\n{% endfor %}"}
+                  docHref="/docs/studio-configuration-reference"
+                  testId="studio-template-syntax-hint"
+                />
+              </div>
               <div className="reports-variable-chips">
                 {TEMPLATE_SNIPPETS.map((snippet) => (
                   <button

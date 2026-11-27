@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AgentKillSwitchControl } from './AgentKillSwitchControl';
 import * as RealtimeModule from '../../api/RealtimeStatus';
@@ -40,7 +42,7 @@ describe('AgentKillSwitchControl', () => {
       kan142Data,
     );
 
-    const btn = screen.getByRole('button', { name: /kill switch/i });
+    const btn = screen.getByRole('button', { name: /^kill switch$/i });
     expect(btn).toBeDefined();
 
     fireEvent.click(btn);
@@ -91,7 +93,7 @@ describe('AgentKillSwitchControl', () => {
     );
 
     // Open confirmation
-    fireEvent.click(screen.getByRole('button', { name: /kill switch/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^kill switch$/i }));
 
     // Confirm
     const confirmBtn = screen.getByRole('button', { name: /confirm kill switch/i });
@@ -129,7 +131,7 @@ describe('AgentKillSwitchControl', () => {
       kan142Data,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /kill switch/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^kill switch$/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm kill switch/i }));
 
     await waitFor(() => {
@@ -169,7 +171,7 @@ describe('AgentKillSwitchControl', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /kill switch/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^kill switch$/i }));
     expect(
       screen.getByText(`Revoke all active agent grants on ${TEST_OBJECT_ID}?`),
     ).toBeDefined();
@@ -177,6 +179,112 @@ describe('AgentKillSwitchControl', () => {
 
     await waitFor(() => {
       expect(cookieSet).toContain('kb_csrf');
+    });
+  });
+
+  describe('KAN-488: FieldHelpHint and Shift-Left Invariants', () => {
+    it('renders FieldHelpHint adjacent to [ Kill Switch ] trigger without button or label nesting (HTML 4.10.4)', () => {
+      renderWithClient(
+        <AgentKillSwitchControl
+          objectId={TEST_OBJECT_ID}
+          canonicalKey="KAN-142"
+          agentsCount={2}
+        />,
+        kan142Data,
+      );
+
+      const hintTrigger = screen.getByTestId('hint-agent-kill-switch');
+      expect(hintTrigger).toBeDefined();
+
+      // Invariant 1: NEVER nest <FieldHelpHint> (<button>) inside <label> or another <button>!
+      expect(
+        document.querySelectorAll('label button.field-help-hint, button button.field-help-hint').length,
+      ).toBe(0);
+      expect(hintTrigger.closest('button.access-inspector__kill-switch-btn')).toBeNull();
+      expect(hintTrigger.closest('label')).toBeNull();
+
+      // Sibling structure inside wrapper
+      const wrapper = hintTrigger.closest('.access-inspector__kill-switch-wrapper');
+      expect(wrapper).not.toBeNull();
+      expect(wrapper?.querySelector('.access-inspector__kill-switch-btn')).toBeDefined();
+    });
+
+    it('opens FieldHelpHint popover on trigger, displaying security summary, default policy, and docHref wiki link', async () => {
+      renderWithClient(
+        <AgentKillSwitchControl
+          objectId={TEST_OBJECT_ID}
+          canonicalKey="KAN-142"
+          agentsCount={2}
+        />,
+        kan142Data,
+      );
+
+      const hintTrigger = screen.getByTestId('hint-agent-kill-switch');
+      fireEvent.focus(hintTrigger);
+
+      const popover = screen.getByTestId('hint-agent-kill-switch-popover');
+      expect(popover).toBeDefined();
+      expect(popover.textContent).toContain('Immediately revokes all active agent tokens and session grants on this object.');
+      expect(popover.textContent).toContain('Active grants retained until explicit revocation');
+
+      // Doc link
+      const docLink = screen.getByRole('link', { name: /more info/i });
+      expect(docLink.getAttribute('href')).toBe('/docs/zero-trust-security-and-access-visibility');
+
+      // Dismiss on Escape
+      fireEvent.keyDown(hintTrigger, { key: 'Escape' });
+      await waitFor(() => {
+        expect(screen.queryByTestId('hint-agent-kill-switch-popover')).toBeNull();
+      });
+    });
+
+    it('renders FieldHelpHint in confirmation prompt without HTML 4.10.4 nesting and allows popover interaction', async () => {
+      renderWithClient(
+        <AgentKillSwitchControl
+          objectId={TEST_OBJECT_ID}
+          canonicalKey="KAN-142"
+          agentsCount={2}
+        />,
+        kan142Data,
+      );
+
+      // Open confirm state
+      fireEvent.click(screen.getByRole('button', { name: /^kill switch$/i }));
+
+      const confirmHintTrigger = screen.getByTestId('hint-agent-kill-switch-confirm');
+      expect(confirmHintTrigger).toBeDefined();
+
+      // Invariant 1: HTML 4.10.4 compliance
+      expect(
+        document.querySelectorAll('label button.field-help-hint, button button.field-help-hint').length,
+      ).toBe(0);
+      expect(confirmHintTrigger.closest('button.access-inspector__btn')).toBeNull();
+      expect(confirmHintTrigger.closest('label')).toBeNull();
+
+      // Open popover from confirmation banner
+      fireEvent.focus(confirmHintTrigger);
+      const popover = screen.getByTestId('hint-agent-kill-switch-confirm-popover');
+      expect(popover).toBeDefined();
+      expect(popover.textContent).toContain('Immediately revokes all active agent tokens and session grants on this object.');
+
+      // Dismiss on Escape - confirmation prompt must remain active
+      fireEvent.keyDown(confirmHintTrigger, { key: 'Escape' });
+      await waitFor(() => {
+        expect(screen.queryByTestId('hint-agent-kill-switch-confirm-popover')).toBeNull();
+      });
+      expect(screen.getByText('Revoke all active agent grants on KAN-142?')).toBeDefined();
+    });
+
+    it('verifies zero inline style={{}} props and zero HTML 4.10.4 button/label nesting in static AST', () => {
+      const componentPath = path.resolve(__dirname, 'AgentKillSwitchControl.tsx');
+      const content = fs.readFileSync(componentPath, 'utf8');
+
+      // Zero inline styles
+      expect(content).not.toMatch(/style\s*=\s*\{\{/);
+
+      // Zero FieldHelpHint inside <label> or <button>
+      expect(content).not.toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*<FieldHelpHint/);
+      expect(content).not.toMatch(/<label[^>]*>(?:(?!<\/label>)[\s\S])*<FieldHelpHint/);
     });
   });
 });

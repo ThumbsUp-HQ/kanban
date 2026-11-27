@@ -70,16 +70,24 @@
 .filter-axis-select-wrap {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1, 4px);
+  gap: var(--space-2, 8px);
   font-family: var(--font-sans);
   font-size: 0.8125rem;
   color: var(--fg-secondary);
+}
+
+.filter-axis-label-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  flex-shrink: 0;
 }
 
 .filter-axis-select-label {
   font-weight: 500;
   font-size: 0.8125rem;
   color: var(--fg-muted);
+  white-space: nowrap;
 }
 
 .filter-axis-select {

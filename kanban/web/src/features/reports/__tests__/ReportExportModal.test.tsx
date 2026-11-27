@@ -379,6 +379,133 @@ describe('ReportTemplateStudioModal', () => {
       );
     });
   });
+
+  it('KAN-468: renders Jinja2 template syntax FieldHelpHint sibling to label without label nesting', () => {
+    const { container } = render(
+      <ReportTemplateStudioModal
+        isOpen={true}
+        onClose={vi.fn()}
+        workspaceSlug="default"
+      />,
+    );
+
+    const hint = screen.getByTestId('studio-template-syntax-hint');
+    expect(hint).toBeDefined();
+
+    // Verify HTML 4.10.4: zero nested triggers inside <label>
+    const nested = container.querySelectorAll('label button.field-help-hint, label .kb-field-help-trigger');
+    expect(nested.length).toBe(0);
+
+    // Verify sibling relationship inside .reports-label-row
+    const labelRow = hint.closest('.reports-label-row');
+    expect(labelRow).not.toBeNull();
+    const label = labelRow?.querySelector('label.reports-label');
+    expect(label).not.toBeNull();
+    expect(label?.contains(hint)).toBe(false);
+    expect(label?.getAttribute('for')).toBe('studio-template-editor');
+
+    // Popover interaction
+    fireEvent.click(hint);
+    expect(screen.getByText('Jinja2 Template Syntax')).toBeDefined();
+    expect(
+      screen.getByText(
+        'Accepts standard Jinja2 syntax, loops, and filters. Insert snippets above or write custom Markdown.',
+      ),
+    ).toBeDefined();
+    const docLink = screen.getByText('More info ->');
+    expect(docLink.getAttribute('href')).toBe('/docs/studio-configuration-reference');
+  });
+
+  it('preserves manually customized slug when changing name in ReportTemplateStudioModal', () => {
+    render(
+      <ReportTemplateStudioModal
+        isOpen={true}
+        onClose={vi.fn()}
+        workspaceSlug="default"
+      />,
+    );
+
+    const nameInput = screen.getByTestId<HTMLInputElement>('studio-template-name-input');
+    const slugInput = screen.getByTestId<HTMLInputElement>('studio-template-slug-input');
+
+    fireEvent.change(slugInput, { target: { value: 'custom-static-slug' } });
+    fireEvent.change(nameInput, { target: { value: 'Updated Report Name' } });
+    expect(slugInput.value).toBe('custom-static-slug');
+  });
+
+  it('resolves active workspace dynamically in ReportTemplateStudioModal from routeParams, query cache, or fallback', async () => {
+    const tpl0 = MOCK_TEMPLATES[0];
+    if (!tpl0) throw new Error('Missing mock template');
+    const createSpy = vi.spyOn(reportsApi, 'createReportTemplate').mockResolvedValue(tpl0);
+
+    // 1. From routeParams
+    const routerMock = await vi.importActual<typeof import('react-router')>('react-router');
+    vi.spyOn(routerMock, 'useParams').mockReturnValue({ workspaceSlug: 'ws-from-route' });
+
+    const { unmount } = render(
+      <ReportTemplateStudioModal
+        isOpen={true}
+        onClose={vi.fn()}
+      />,
+    );
+    let nameInput = screen.getByTestId<HTMLInputElement>('studio-template-name-input');
+    let form = screen.getByTestId('template-studio-save-btn').closest('form');
+    if (!form) throw new Error('Form not found');
+    fireEvent.change(nameInput, { target: { value: 'Route Tpl' } });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith('ws-from-route', expect.anything());
+    });
+    unmount();
+
+    // 2. From cachedMe in queryClient
+    vi.spyOn(routerMock, 'useParams').mockReturnValue({});
+    vi.spyOn(authModule, 'useAuth').mockReturnValue({
+      session: null,
+      isLoading: false,
+      initialized: true,
+      refreshSession: () => Promise.resolve(null),
+      logout: () => Promise.resolve(),
+    });
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(qk.me(), { workspace_id: 'ws-from-cached-me' });
+
+    const renderedCache = render(
+      <QueryClientProvider client={queryClient}>
+        <ReportTemplateStudioModal
+          isOpen={true}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    nameInput = screen.getByTestId<HTMLInputElement>('studio-template-name-input');
+    form = screen.getByTestId('template-studio-save-btn').closest('form');
+    if (!form) throw new Error('Form not found');
+    fireEvent.change(nameInput, { target: { value: 'Cache Tpl' } });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith('ws-from-cached-me', expect.anything());
+    });
+    renderedCache.unmount();
+
+    // 3. Fallback to default
+    queryClient.clear();
+    const renderedFallback = render(
+      <ReportTemplateStudioModal
+        isOpen={true}
+        onClose={vi.fn()}
+      />,
+    );
+    nameInput = screen.getByTestId<HTMLInputElement>('studio-template-name-input');
+    form = screen.getByTestId('template-studio-save-btn').closest('form');
+    if (!form) throw new Error('Form not found');
+    fireEvent.change(nameInput, { target: { value: 'Fallback Tpl' } });
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith('default', expect.anything());
+    });
+    renderedFallback.unmount();
+  });
 });
 
 describe('ReportExportModal', () => {
@@ -729,6 +856,218 @@ describe('ReportExportModal', () => {
       expect(container?.getAttribute('style')).toBeNull();
       const select = screen.getByTestId('report-template-select');
       expect(select.getAttribute('style')).toBeNull();
+    });
+  });
+
+  describe('KAN-466: StudioDocLink and FieldHelpHint integration', () => {
+    it('renders report-export-doc-link with correct href and label in header', async () => {
+      render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="default"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-export-doc-link')).toBeDefined();
+      });
+
+      const docLink = screen.getByTestId('report-export-doc-link');
+      expect(docLink.getAttribute('href')).toBe('/docs/studio-configuration-reference');
+      expect(docLink.textContent).toContain('Reports Documentation ->');
+    });
+
+    it('renders report-encryption-help-hint adjacent to AES-256 checkbox and satisfies HTML 4.10.4', async () => {
+      const { container } = render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="default"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-encryption-help-hint')).toBeDefined();
+      });
+
+      const hintTrigger = screen.getByTestId('report-encryption-help-hint');
+      expect(hintTrigger).toBeDefined();
+
+      // HTML 4.10.4: NEVER nest <FieldHelpHint> inside <label>!
+      const nestedTriggers = container.querySelectorAll('label button.field-help-hint, label .kb-field-help-trigger');
+      expect(nestedTriggers.length).toBe(0);
+
+      // Verify hint is a sibling to the checkbox row inside wrapper
+      const wrapper = hintTrigger.closest('.reports-checkbox-row-wrapper');
+      expect(wrapper).not.toBeNull();
+      const label = wrapper?.querySelector('label.reports-checkbox-row');
+      expect(label).not.toBeNull();
+      expect(label?.contains(hintTrigger)).toBe(false);
+    });
+
+    it('falls back to items[0] when security-assessment-report is not in templates and covers empty param fallback', async () => {
+      const customTemplates: reportsApi.ReportTemplate[] = [
+        {
+          id: 'tpl-custom-1',
+          workspace_id: 'ws-1',
+          slug: 'custom-only-report',
+          name: 'Custom Only Report',
+          is_builtin: false,
+          template_markdown: '# Custom Report',
+          parameters_schema_json: [
+            {
+              name: 'notes',
+              label: 'Audit Notes',
+              type: 'textarea',
+            },
+          ],
+          csv_columns_json: [],
+          allowed_formats: ['PDF'],
+          created_at: '2026-11-22T00:00:00Z',
+          updated_at: '2026-11-22T00:00:00Z',
+        },
+      ];
+      vi.spyOn(reportsApi, 'fetchReportTemplates').mockResolvedValueOnce(customTemplates);
+
+      render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-param-input-notes')).toBeDefined();
+      });
+      const textarea = screen.getByTestId<HTMLTextAreaElement>('report-param-input-notes');
+      expect(textarea.value).toBe('');
+    });
+  });
+
+  describe('KAN-467: Default value indicators for formats and templates', () => {
+    it('labels PDF format pill as PDF (Default) and leaves other formats unmodified', async () => {
+      render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="default"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-format-pill-pdf')).toBeDefined();
+      });
+
+      const pdfPill = screen.getByTestId('report-format-pill-pdf');
+      expect(pdfPill.textContent).toBe('PDF (Default)');
+      expect(pdfPill.getAttribute('aria-pressed')).toBe('true');
+
+      const xlsxPill = screen.getByTestId('report-format-pill-xlsx');
+      expect(xlsxPill.textContent).toBe('XLSX');
+      expect(xlsxPill.getAttribute('aria-pressed')).toBe('false');
+
+      const csvPill = screen.getByTestId('report-format-pill-csv');
+      expect(csvPill.textContent).toBe('CSV');
+
+      const docxPill = screen.getByTestId('report-format-pill-docx');
+      expect(docxPill.textContent).toBe('DOCX');
+    });
+
+    it('appends (Default) to security-assessment-report option in template select', async () => {
+      render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="default"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-template-select')).toBeDefined();
+      });
+
+      const select = screen.getByTestId<HTMLSelectElement>('report-template-select');
+      const options = Array.from(select.querySelectorAll('option'));
+
+      const defaultOpt = options.find((opt) => opt.value === 'security-assessment-report');
+      expect(defaultOpt).toBeDefined();
+      expect(defaultOpt?.textContent).toContain('(Default)');
+      expect(defaultOpt?.textContent).toBe('Security Assessment Report (Built-in) (Default)');
+
+      const sprintOpt = options.find((opt) => opt.value === 'sprint-release-notes');
+      expect(sprintOpt).toBeDefined();
+      expect(sprintOpt?.textContent).not.toContain('(Default)');
+      expect(sprintOpt?.textContent).toBe('Sprint & Release Notes Report (Custom)');
+    });
+
+    it('clicking PDF (Default) format pill keeps PDF format active and updates submit button', async () => {
+      render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="default"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-format-pill-pdf')).toBeDefined();
+      });
+
+      const pdfPill = screen.getByTestId('report-format-pill-pdf');
+      const submitBtn = screen.getByTestId('reports-export-submit-btn');
+
+      // Click XLSX first, then click back to PDF
+      const xlsxPill = screen.getByTestId('report-format-pill-xlsx');
+      fireEvent.click(xlsxPill);
+      expect(submitBtn.textContent).toContain('Download XLSX');
+
+      fireEvent.click(pdfPill);
+      expect(pdfPill.getAttribute('aria-pressed')).toBe('true');
+      expect(submitBtn.textContent).toContain('Download PDF');
+    });
+
+    it('satisfies HTML 4.10.4 label semantics for format group, parameters, and archive password', async () => {
+      const { container } = render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="default"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-format-pills')).toBeDefined();
+      });
+
+      // Format pills container has role="group" and aria-labelledby
+      const formatPills = screen.getByTestId('report-format-pills');
+      expect(formatPills.getAttribute('role')).toBe('group');
+      expect(formatPills.getAttribute('aria-labelledby')).toBe('report-export-format-label');
+
+      const formatLabel = container.querySelector('#report-export-format-label');
+      expect(formatLabel).not.toBeNull();
+      expect(formatLabel?.tagName.toLowerCase()).toBe('span');
+      expect(formatLabel?.textContent).toBe('Export Format');
+
+      // Template parameters label is a span
+      const paramLabels = Array.from(container.querySelectorAll('span.reports-label'));
+      const templateParamsSpan = paramLabels.find((el) => el.textContent === 'Template Parameters');
+      expect(templateParamsSpan).toBeDefined();
+
+      // Check encryption toggle and password aria-label
+      const encryptToggle = screen.getByTestId('reports-zip-toggle');
+      fireEvent.click(encryptToggle);
+
+      const passwordInput = screen.getByTestId('reports-zip-password-input');
+      expect(passwordInput.getAttribute('aria-label')).toBe('Archive Password');
     });
   });
 });
