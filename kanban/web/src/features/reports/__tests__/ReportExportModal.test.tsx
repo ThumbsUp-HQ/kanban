@@ -1032,5 +1032,42 @@ describe('ReportExportModal', () => {
       expect(pdfPill.getAttribute('aria-pressed')).toBe('true');
       expect(submitBtn.textContent).toContain('Download PDF');
     });
+
+    it('satisfies HTML 4.10.4 label semantics for format group, parameters, and archive password', async () => {
+      const { container } = render(
+        <ReportExportModal
+          isOpen={true}
+          onClose={vi.fn()}
+          projectKey="KAN"
+          workspaceSlug="default"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('report-format-pills')).toBeDefined();
+      });
+
+      // Format pills container has role="group" and aria-labelledby
+      const formatPills = screen.getByTestId('report-format-pills');
+      expect(formatPills.getAttribute('role')).toBe('group');
+      expect(formatPills.getAttribute('aria-labelledby')).toBe('report-export-format-label');
+
+      const formatLabel = container.querySelector('#report-export-format-label');
+      expect(formatLabel).not.toBeNull();
+      expect(formatLabel?.tagName.toLowerCase()).toBe('span');
+      expect(formatLabel?.textContent).toBe('Export Format');
+
+      // Template parameters label is a span
+      const paramLabels = Array.from(container.querySelectorAll('span.reports-label'));
+      const templateParamsSpan = paramLabels.find((el) => el.textContent === 'Template Parameters');
+      expect(templateParamsSpan).toBeDefined();
+
+      // Check encryption toggle and password aria-label
+      const encryptToggle = screen.getByTestId('reports-zip-toggle');
+      fireEvent.click(encryptToggle);
+
+      const passwordInput = screen.getByTestId('reports-zip-password-input');
+      expect(passwordInput.getAttribute('aria-label')).toBe('Archive Password');
+    });
   });
 });

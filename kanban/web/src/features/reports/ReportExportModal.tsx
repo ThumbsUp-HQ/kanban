@@ -289,8 +289,13 @@ export function ReportExportModal({
 
             {/* Format Pill Selector */}
             <div className="reports-form-group">
-              <label className="reports-label">Export Format</label>
-              <div className="reports-format-pills" data-testid="report-format-pills">
+              <span id="report-export-format-label" className="reports-label">Export Format</span>
+              <div
+                className="reports-format-pills"
+                data-testid="report-format-pills"
+                role="group"
+                aria-labelledby="report-export-format-label"
+              >
                 {SUPPORTED_FORMATS.map((fmt) => {
                   const isActive = selectedFormat === fmt;
                   return (
@@ -312,7 +317,7 @@ export function ReportExportModal({
             {/* Dynamic Template Parameters */}
             {parametersSchema.length > 0 && (
               <div className="reports-form-group">
-                <label className="reports-label">Template Parameters</label>
+                <span className="reports-label">Template Parameters</span>
                 <div className="reports-parameters-grid">
                   {parametersSchema.map((param) => (
                     <div key={param.name} className="reports-form-group">
@@ -373,6 +378,7 @@ export function ReportExportModal({
                   <input
                     type="password"
                     data-testid="reports-zip-password-input"
+                    aria-label="Archive Password"
                     className="reports-input"
                     placeholder="Enter encryption passphrase (min 4 characters)"
                     value={zipPassword}
