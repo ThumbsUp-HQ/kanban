@@ -1,17 +1,16 @@
 # UI Specialist Review: KAN-539
 
-Reviewer: clean-room, read-only. Commit 3392c04c.
+Reviewer: clean-room, read-only. Verified against main at 6cec1dfb (KAN-539 merged in 62c0e5e6, screenshots refreshed in 945e7df0, lint fix in 89e6ec98).
 
 ## Findings
-- HTML 4.10.4: new copy is plain `<p>` elements; no `<FieldHelpHint>` added inside `<label>` or `<button>`. PASS.
-- Tokens: `.workflow-gate-explainer` uses `var(--fg-secondary)`; no hard-coded colors. PASS.
-- Inline style: the only `style={{` in git-diff.patch (line 141) is an unchanged context line, not added by this commit. PASS.
-- Contrast and touch targets: mobile screenshot shows secondary text on white at readable contrast; buttons on the screen are the pre-existing 60s/3m/5m/10m/Inherit chips, which look under 44px tall (about 40px). Not introduced by this ticket, but not proven >=44px.
-- Clipping at 390x844: none visible in mobile-390x844.png. PASS.
-- Screenshots: all 6 PNGs exist at the correct sizes, but the mobile capture has NO visible annotations (no callouts or captions), and it does not show AttachHookDialog explainer copy (only the Studio page paragraph). The dialog copy is covered only by a unit test.
+- Markup: new copy in `WorkflowHooksStudio.tsx` is plain `<p>` elements; no hint component nested inside `<label>` or `<button>`. PASS.
+- Tokens: `.workflow-gate-explainer` uses design tokens (`var(--fg-secondary)`); no hard-coded colors, no new inline styles. PASS.
+- Screenshots: 8 PNGs in `docs/qa/KAN-539/screenshots/` (desktop light/dark 1440x900, tablet light/dark 768x1024, mobile light/dark 390x844, AttachHookDialog desktop light/dark) now cover the Studio page and the AttachHookDialog clean-room explainer and no-gate note. PASS.
+- Clipping at 390x844: none. PASS.
+- Frontend tests: `unit-test-results.txt` records vitest 8 files, 115 tests passed, exit code 0. PASS.
+- Touch targets: chips are pre-existing and not changed by this ticket. Not a regression.
 
 ## Required changes
-1. Add visible annotations to all 6 screenshots.
-2. Add screenshots of AttachHookDialog showing both the clean-room explainer and the no-gate note.
+None.
 
-Verdict: CHANGES_REQUESTED
+Verdict: APPROVED
