@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { qk } from '../../api/queryKeys';
 import { announce } from '../../api/RealtimeStatus';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import type { IssueDetail } from '../drawer/slots';
 import {
   USER_CREATABLE_LINK_TYPES,
@@ -101,12 +102,23 @@ export function LinkGraphAction({ issue }: LinkGraphActionProps): JSX.Element {
     if (!popoverOpen) return;
 
     function handleKeyDown(e: KeyboardEvent): void {
+      // Yield keyboard events (Escape) when HelpDrawer is open above popover (KAN-492)
+      if (document.querySelector('.kb-help-drawer')) {
+        return;
+      }
       if (e.key === 'Escape') {
         setPopoverOpen(false);
       }
     }
 
     function handleClickOutside(e: MouseEvent): void {
+      // Don't close if clicking inside HelpDrawer or its backdrop (KAN-492)
+      if (
+        document.querySelector('.kb-help-drawer')?.contains(e.target as Node) ||
+        document.querySelector('.kb-help-drawer-backdrop')?.contains(e.target as Node)
+      ) {
+        return;
+      }
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setPopoverOpen(false);
       }
@@ -198,6 +210,18 @@ export function LinkGraphAction({ issue }: LinkGraphActionProps): JSX.Element {
           aria-label="Link and Object Graph details"
           data-testid="link-graph-popover"
         >
+          {/* Popover Header */}
+          <header className="link-graph-header">
+            <span className="link-graph-header__title">Object Graph</span>
+            <StudioDocLink
+              href="/docs/universal-object-graph-and-link-auditor"
+              label="Object Graph Guide ->"
+              testId="link-graph-doc-link"
+            />
+          </header>
+
+          <div className="link-graph-divider" />
+
           {/* Canonical Copy Actions */}
           <div className="link-actions-row">
             <button
