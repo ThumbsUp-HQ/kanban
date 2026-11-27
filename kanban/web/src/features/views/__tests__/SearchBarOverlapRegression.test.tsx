@@ -69,7 +69,7 @@ describe('SearchBarOverlapRegression - KAN-385 Flex Basis and Non-Overlap Invari
       expect(css).toMatch(/\.navigator-search-input,\s*\n?\.navigator-query-input\s*\{[^}]*width:\s*100%;/);
 
       // 3. Buttons, mode group, header group, csv actions, and state filter trigger flex-shrink: 0
-      expect(css).toMatch(/\.navigator-search-btn,\s*\n?\.navigator-mode-group,\s*\n?\.navigator-header-mode-group,\s*\n?\.navigator-csv-actions,\s*\n?\.state-filter-popover-wrap,\s*\n?\.navigator-state-trigger\s*\{[^}]*flex-shrink:\s*0;/);
+      expect(css).toMatch(/\.navigator-search-btn,\s*\n?(?:\.navigator-mode-wrap,\s*\n?)?\.navigator-mode-group,\s*\n?\.navigator-header-mode-group,\s*\n?\.navigator-csv-actions,\s*\n?\.state-filter-popover-wrap,\s*\n?\.navigator-state-trigger\s*\{[^}]*flex-shrink:\s*0;/);
 
       // 4. Advanced 1-line mode (data-header-mode="advanced-1line")
       expect(css).toMatch(/\.issue-navigator-bar\[data-header-mode="advanced-1line"\]\s+\.navigator-top-row\s*\{[^}]*min-width:\s*max-content;/);

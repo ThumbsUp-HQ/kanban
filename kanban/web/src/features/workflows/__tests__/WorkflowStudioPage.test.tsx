@@ -398,9 +398,9 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
       );
 
       // Primary trigger and action fields are directly visible
-      expect(screen.getByLabelText(/From State/i)).toBeDefined();
-      expect(screen.getByLabelText(/To State/i)).toBeDefined();
-      expect(screen.getByLabelText(/Hook Name/i)).toBeDefined();
+      expect(screen.getByLabelText(/From State/i, { selector: 'select' })).toBeDefined();
+      expect(screen.getByLabelText(/To State/i, { selector: 'select' })).toBeDefined();
+      expect(screen.getByLabelText(/Hook Name/i, { selector: 'input' })).toBeDefined();
       expect(screen.getByText('Sync Wasm Validator')).toBeDefined();
 
       // Advanced Hook Settings section is collapsed by default

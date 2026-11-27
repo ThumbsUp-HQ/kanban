@@ -816,7 +816,7 @@ describe('Workflow Studio Coverage Booster', () => {
       expect(screen.getByText('Attach Workflow Helper Hook')).toBeDefined();
 
       // Submit creating a new hook
-      fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'new-rule-hook' } });
+      fireEvent.change(screen.getByLabelText(/Hook Name/i, { selector: 'input' }), { target: { value: 'new-rule-hook' } });
       fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
       await waitFor(() => {
         expect(createSpy).toHaveBeenCalledWith('KAN', expect.objectContaining({ name: 'new-rule-hook' }));
@@ -893,7 +893,7 @@ describe('Workflow Studio Coverage Booster', () => {
       expect(screen.getByText('Attach Workflow Helper Hook')).toBeDefined();
 
       // Submit and catch non-AAL2 error
-      fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'fail-hook' } });
+      fireEvent.change(screen.getByLabelText(/Hook Name/i, { selector: 'input' }), { target: { value: 'fail-hook' } });
       fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
       await waitFor(() => {
         expect(screen.getByText('Create failure')).toBeDefined();
@@ -1228,7 +1228,7 @@ describe('Workflow Studio Coverage Booster', () => {
       );
 
       // Fill in hook name
-      fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'mutator-hook' } });
+      fireEvent.change(screen.getByLabelText(/Hook Name/i, { selector: 'input' }), { target: { value: 'mutator-hook' } });
 
       // Switch to Sync Wasm Mutator
       fireEvent.click(screen.getByLabelText('Sync Wasm Mutator'));
@@ -1297,15 +1297,15 @@ describe('Workflow Studio Coverage Booster', () => {
         />,
       );
 
-      fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'test-hook' } });
+      fireEvent.change(screen.getByLabelText(/Hook Name/i, { selector: 'input' }), { target: { value: 'test-hook' } });
 
       // Clear to_state
-      fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: '' } });
+      fireEvent.change(screen.getByLabelText(/To State/i, { selector: 'select' }), { target: { value: '' } });
       fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
       expect(screen.getByText('Target state (to_state) is required.')).toBeDefined();
 
       // Set to_state back and submit to trigger non-Error rejection
-      fireEvent.change(screen.getByLabelText(/To State/i), { target: { value: 'Open' } });
+      fireEvent.change(screen.getByLabelText(/To State/i, { selector: 'select' }), { target: { value: 'Open' } });
       fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
       await waitFor(() => {
         expect(screen.getByText('Failed to attach workflow hook.')).toBeDefined();
@@ -1353,7 +1353,7 @@ describe('Workflow Studio Coverage Booster', () => {
         />,
       );
 
-      fireEvent.change(screen.getByLabelText(/Hook Name/i), { target: { value: 'same-state-hook' } });
+      fireEvent.change(screen.getByLabelText(/Hook Name/i, { selector: 'input' }), { target: { value: 'same-state-hook' } });
       fireEvent.click(screen.getByRole('button', { name: 'Attach Hook' }));
       expect(screen.getByText('from_state and to_state cannot be identical.')).toBeDefined();
 

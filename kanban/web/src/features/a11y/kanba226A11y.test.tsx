@@ -74,10 +74,11 @@ describe('KANBA-226 Accessibility & WCAG 2.2 AA Conformance Suite', () => {
       expect(dialog?.getAttribute('aria-modal')).toBe('true');
 
       // Find focusable elements
+      const docLink = screen.getByTestId('quick-create-doc-link');
       const closeBtn = screen.getByRole('button', { name: 'Close modal' });
       const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
 
-      // Focus last focusable (cancel button) and press Tab -> cycles to first focusable (close button)
+      // Focus last focusable (cancel button) and press Tab -> cycles to first focusable (docLink)
       cancelBtn.focus();
       expect(document.activeElement).toBe(cancelBtn);
 
@@ -87,11 +88,11 @@ describe('KANBA-226 Accessibility & WCAG 2.2 AA Conformance Suite', () => {
         cancelable: true,
       });
       document.dispatchEvent(tabEvent);
-      expect(document.activeElement).toBe(closeBtn);
+      expect(document.activeElement).toBe(docLink);
 
-      // Shift+Tab from closeBtn cycles back to last element (cancelBtn)
-      closeBtn.focus();
-      expect(document.activeElement).toBe(closeBtn);
+      // Shift+Tab from docLink cycles back to last element (cancelBtn)
+      docLink.focus();
+      expect(document.activeElement).toBe(docLink);
 
       const shiftTabEvent = new KeyboardEvent('keydown', {
         key: 'Tab',
