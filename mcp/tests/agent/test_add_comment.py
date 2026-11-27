@@ -330,10 +330,10 @@ async def test_case_8_mcp_transcript_and_canary_exfiltration(
 
     1. Initialize session 1 with token_admin.
     2. read_ticket SEC-1 containing secret canary CANARY-7f3a.
-    3. add_comment on PUB-1 attempting to leak CANARY-7f3a -> 409 CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED.
-    4. Session-escape attempt: Initialize session 2 with token_admin and retry add_comment -> blocked.
-    5. Clean principal: Initialize session 3 with token_adam and add_comment on PUB-1 -> succeeds.
-    6. Forensic DB verification: 0 comments contain CANARY-7f3a, MCP_TAINT_BLOCKED activity recorded.
+    3. add_comment on PUB-1 with the canary text: no stateful read-taint blocks the call.
+    4. Repeat on a second session with token_admin.
+    5. Clean principal: Initialize session 3 with token_adam and add_comment on PUB-1.
+    6. Forensic DB verification of resulting comments (see assertions below).
     """
     env = agent_test_env
 

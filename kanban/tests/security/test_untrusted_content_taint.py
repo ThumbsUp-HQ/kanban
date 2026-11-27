@@ -3,14 +3,11 @@
 # ruff: noqa: E501
 """Security tests for provenance trust tiers and untrusted content taint tracking (KAN-70).
 
-Covers:
-  1. Positive: Reading trusted_member content in Project A permits subsequent mutations in Project A.
-  2. Negative: Reading untrusted content (imported/webhook) in Project A blocks subsequent mutations
-     in Project A (and all projects) with 409 UNTRUSTED_CONTENT_TAINT_ACTIVE and emits MCP_TAINT_BLOCKED.
-  3. Bypass: Supplying an explicit human confirmation token permits mutations despite active untrusted taint.
-  4. Self-upgrade: Untrusted ingestion channels attempting to claim trusted_member/verified_agent
+Covers provenance trust tiers only (stateful read-taint was removed in KAN-535):
+  1. Reading trusted_member content permits subsequent mutations.
+  2. Reading untrusted content does not block later mutations (no stateful taint).
+  3. Self-upgrade: Untrusted ingestion channels attempting to claim trusted_member/verified_agent
      are rejected with 403 PROVENANCE_SELF_UPGRADE_FORBIDDEN.
-  5. Comments: An untrusted comment on an issue causes comment listing to propagate untrusted taint.
 """
 
 from __future__ import annotations

@@ -1,2 +1,65 @@
-make check: PASS (ruff, format, mypy, lint-imports, check_no_dashes, check-migrations: 87 migrations, head p6_25_drop_mcp_read_taint)
-frontend: tsc -b, eslint, vite build: PASS
+$ make check
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+3088 files already formatted
+uv run mypy
+Success: no issues found in 1381 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 1211 files, 4525 dependencies.
+---------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (9 ignored imports)
+mcp forbidden from importing database KEPT (55 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan535-d50c37f4/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+uv run python -m database.migrations.cli check-migrations --static-only
+OK: All 87 migrations valid. Single head: p6_25_drop_mcp_read_taint
+exit=0
+$ cd kanban/web && npm run typecheck && npm run lint && npm run build
+
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
+
+
+> @kanban/web@0.1.0 lint
+> eslint . --max-warnings 0
+
+
+> @kanban/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 767 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.50 kB │ gzip:   0.30 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-Db6GL4uR.css            686.24 kB │ gzip:  95.71 kB
+dist/assets/index-D2r9t8dz.js           3,221.38 kB │ gzip: 892.41 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.29s
+exit=0

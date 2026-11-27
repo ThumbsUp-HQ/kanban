@@ -402,6 +402,1613 @@ index 7b0875c9..7bb0f9ae 100644
  | **Wiki Documentation Architect & Author** | `flash` / Coordinator | **S1-S15** (Full System Coverage + OpenAPI 242-Route Reference + MCP 24-Tool Reference) | Authors complete 10-page Wiki in `thumbs-up-kanban.wiki/` with `_Sidebar.md`, `_Footer.md`, embedded screenshots, Mermaid diagrams, REST OpenAPI reference, MCP catalog, and CLI runbooks. |
  | **Carbon Architecture-vs-Docs Delta Auditor** | `pro` (Carbon) | **S1-S15** Cross-Layer Forensic Delta Audit | Compares `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` and actual codebase against all Wiki topics, browser QA findings, and API/MCP schemas to identify missing features, incomplete items, and actionable backlog tickets. |
  
+diff --git a/docs/qa/KAN-18/contract-sample.yaml b/docs/qa/KAN-18/contract-sample.yaml
+index 32b9e0d1..2f324548 100644
+--- a/docs/qa/KAN-18/contract-sample.yaml
++++ b/docs/qa/KAN-18/contract-sample.yaml
+@@ -28,8 +28,8 @@ search_read_doc_standard:
+ 
+       Authentication overview.'
+     etag: 25da1324e14efbc20ccf12ece7314acf98e606e26782edc41da760b76f9d9383
+-    access: '{''kind'': ''project'', ''scope_label'': ''project: arch'', ''workspace_id'': ''01a1fbe5-d0e1-73e0-9dfb-247b60abc517'',
+-      ''workspace_name'': ''engineering docs'', ''project_id'': ''01a1fbe5-d13b-70f1-91a2-592c2b45b03e'', ''project_key'':
++    access: '{''kind'': ''project'', ''scope_label'': ''project: arch'', ''workspace_id'': ''01a21cee-747a-73c0-b798-aeab0b4ce0ca'',
++      ''workspace_name'': ''engineering docs'', ''project_id'': ''01a21cee-74e2-706e-8765-32adf4faad82'', ''project_key'':
+       ''arch'', ''project_name'': ''architecture project''}'
+ create_doc:
+   tool: create
+@@ -45,7 +45,7 @@ create_doc:
+   response:
+     status: created
+     kind: doc
+-    id: 01a1fbe5-d30a-7094-bd76-120f67f31c19
++    id: 01a21cee-77aa-7971-8391-aa3abee90495
+     key: docs/architecture
+     title: Architecture
+     version_seq: 1
+@@ -65,7 +65,7 @@ create_sticky:
+   response:
+     status: created
+     kind: sticky
+-    id: e034a914-1f16-44d4-b88c-12157d7db9f3
++    id: a57e41c2-95dc-4440-8706-4c0d3628e6e4
+     color: sky
+     title: Quick Sticky Note
+     promotion_recommended: false
+@@ -80,7 +80,7 @@ update_diff_patch:
+   response:
+     status: updated
+     kind: page
+-    id: 01a1fbe5-d37b-788b-9ed8-cefa8a57aa61
++    id: 01a21cee-7823-7fca-8bf1-5fcc6ea5af28
+     key: docs/architecture/auth-studio
+     title: Auth Studio
+     version_seq: 2
+@@ -88,7 +88,7 @@ update_diff_patch:
+ update_sticky_auto_promotion:
+   tool: update
+   arguments:
+-    id: e034a914-1f16-44d4-b88c-12157d7db9f3
++    id: a57e41c2-95dc-4440-8706-4c0d3628e6e4
+     type: DOC
+     title: TLS Verification Guide
+     parent: docs/architecture
+@@ -98,7 +98,7 @@ update_sticky_auto_promotion:
+       Preserved permissions and converted to Doc.'
+   response:
+     status: promoted
+-    id: e034a914-1f16-44d4-b88c-12157d7db9f3
++    id: a57e41c2-95dc-4440-8706-4c0d3628e6e4
+     doc: docs/architecture
+     link: PROMOTED_TO_DOC
+     title: Architecture
+@@ -112,7 +112,7 @@ update_inline_links:
+   response:
+     status: updated
+     kind: page
+-    id: 01a1fbe5-d37b-788b-9ed8-cefa8a57aa61
++    id: 01a21cee-7823-7fca-8bf1-5fcc6ea5af28
+     key: docs/architecture/auth-studio
+     title: Auth Studio
+     version_seq: 2
+diff --git a/docs/qa/KANBA-205/contract-sample.json b/docs/qa/KANBA-205/contract-sample.json
+index b9d8d501..11e974fc 100644
+--- a/docs/qa/KANBA-205/contract-sample.json
++++ b/docs/qa/KANBA-205/contract-sample.json
+@@ -1,6 +1,1450 @@
+ {
+   "ticket": "KANBA-205",
+   "exchanges": [
++    {
++      "name": "condition_a_initialize",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/agent",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "content-length": "88",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 1,
++          "method": "initialize",
++          "params": {
++            "protocolVersion": "2025-06-18"
++          }
++        }
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "mcp-session-id": "pBQrWheuJ57yIaKmQbmJd599cIhciG39G6q98SsZE7c",
++          "content-length": "445",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 1,
++          "result": {
++            "protocolVersion": "2025-06-18",
++            "capabilities": {
++              "tools": {
++                "listChanged": true
++              }
++            },
++            "serverInfo": {
++              "name": "kanban-mcp-agent",
++              "version": "0.0.0"
++            },
++            "instructions": "Use human keys (e.g. KAN, KAN-142, @handle). Pass identifier='help' (or project='help' on create_ticket) for live project options. On create_ticket, set 'project' and optional 'parent' on the root object only; omit 'project' and 'parent' inside children[]."
++          }
++        }
++      }
++    },
++    {
++      "name": "condition_a_tools_list",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/agent",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "mcp-session-id": "pBQrWheuJ57yIaKmQbmJd599cIhciG39G6q98SsZE7c",
++          "content-length": "46",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 2,
++          "method": "tools/list"
++        }
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "9034",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 2,
++          "result": {
++            "tools": [
++              {
++                "name": "search_tickets",
++                "description": "Search tickets.",
++                "inputSchema": {
++                  "type": "object",
++                  "properties": {
++                    "query": {
++                      "type": "string",
++                      "maxLength": 500,
++                      "description": "Search query"
++                    },
++                    "workspace": {
++                      "type": "string",
++                      "description": "Workspace slug"
++                    },
++                    "project": {
++                      "type": "string",
++                      "description": "Project ref"
++                    },
++                    "states": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20,
++                      "description": "State filters"
++                    },
++                    "assignees": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20,
++                      "description": "Assignee filters"
++                    },
++                    "cycle": {
++                      "type": "string",
++                      "description": "Cycle filter"
++                    },
++                    "modules": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20,
++                      "description": "Module filters"
++                    },
++                    "labels": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20,
++                      "description": "Label filters"
++                    },
++                    "blocked": {
++                      "type": "boolean",
++                      "description": "Blocked filter"
++                    },
++                    "gate_status": {
++                      "type": "string",
++                      "enum": [
++                        "pending",
++                        "approved",
++                        "rejected"
++                      ],
++                      "description": "Gate status filter"
++                    },
++                    "mode": {
++                      "type": "string",
++                      "enum": [
++                        "lexical",
++                        "hybrid"
++                      ],
++                      "default": "lexical",
++                      "description": "Search mode"
++                    },
++                    "lod": {
++                      "type": "string",
++                      "enum": [
++                        "summary",
++                        "standard"
++                      ],
++                      "default": "summary",
++                      "description": "LOD tier"
++                    },
++                    "limit": {
++                      "type": "integer",
++                      "minimum": 1,
++                      "maximum": 50,
++                      "default": 20,
++                      "description": "Max results"
++                    },
++                    "cursor": {
++                      "type": "string",
++                      "maxLength": 200,
++                      "description": "Cursor"
++                    }
++                  },
++                  "additionalProperties": false
++                }
++              },
++              {
++                "name": "read_ticket",
++                "description": "Read ticket.",
++                "inputSchema": {
++                  "type": "object",
++                  "properties": {
++                    "identifier": {
++                      "type": "string",
++                      "description": "Issue ref"
++                    },
++                    "workspace": {
++                      "type": "string",
++                      "description": "Workspace"
++                    },
++                    "lod": {
++                      "type": "string",
++                      "enum": [
++                        "summary",
++                        "standard",
++                        "full"
++                      ],
++                      "default": "standard",
++                      "description": "LOD tier"
++                    },
++                    "comments_limit": {
++                      "type": "integer",
++                      "minimum": 0,
++                      "maximum": 50,
++                      "default": 20,
++                      "description": "Max comments"
++                    }
++                  },
++                  "required": [
++                    "identifier"
++                  ],
++                  "additionalProperties": false
++                }
++              },
++              {
++                "name": "create_ticket",
++                "description": "Create ticket or atomic child tree (max 50 nodes, depth <=6; omit project and parent inside children).",
++                "inputSchema": {
++                  "type": "object",
++                  "$defs": {
++                    "child": {
++                      "type": "object",
++                      "properties": {
++                        "summary": {
++                          "type": "string",
++                          "minLength": 1,
++                          "maxLength": 500
++                        },
++                        "description_markdown": {
++                          "type": "string"
++                        },
++                        "state": {
++                          "type": "string"
++                        },
++                        "priority": {
++                          "type": "string"
++                        },
++                        "assignees": {
++                          "type": "array",
++                          "items": {
++                            "type": "string"
++                          },
++                          "maxItems": 20
++                        },
++                        "labels": {
++                          "type": "array",
++                          "items": {
++                            "type": "string"
++                          },
++                          "maxItems": 20
++                        },
++                        "cycle": {
++                          "type": "string"
++                        },
++                        "modules": {
++                          "type": "array",
++                          "items": {
++                            "type": "string"
++                          },
++                          "maxItems": 20
++                        },
++                        "start_date": {
++                          "type": "string",
++                          "format": "date"
++                        },
++                        "due_date": {
++                          "type": "string",
++                          "format": "date"
++                        },
++                        "children": {
++                          "type": "array",
++                          "maxItems": 49,
++                          "items": {
++                            "$ref": "#/$defs/child"
++                          }
++                        }
++                      },
++                      "required": [
++                        "summary"
++                      ],
++                      "additionalProperties": false
++                    }
++                  },
++                  "properties": {
++                    "project": {
++                      "type": "string",
++                      "description": "Project ref (root only; inherited by children)"
++                    },
++                    "summary": {
++                      "type": "string",
++                      "minLength": 1,
++                      "maxLength": 500,
++                      "description": "Summary"
++                    },
++                    "description_markdown": {
++                      "type": "string",
++                      "description": "Description"
++                    },
++                    "state": {
++                      "type": "string",
++                      "description": "State name or UUID"
++                    },
++                    "priority": {
++                      "type": "string",
++                      "description": "Priority slug"
++                    },
++                    "assignees": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20,
++                      "description": "Assignees"
++                    },
++                    "labels": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20,
++                      "description": "Labels"
++                    },
++                    "cycle": {
++                      "type": "string",
++                      "description": "Cycle"
++                    },
++                    "modules": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20,
++                      "description": "Modules"
++                    },
++                    "parent": {
++                      "type": "string",
++                      "description": "Parent issue ref (root only; omit in children)"
++                    },
++                    "start_date": {
++                      "type": "string",
++                      "format": "date",
++                      "description": "Start date"
++                    },
++                    "due_date": {
++                      "type": "string",
++                      "format": "date",
++                      "description": "Due date"
++                    },
++                    "children": {
++                      "type": "array",
++                      "maxItems": 49,
++                      "items": {
++                        "$ref": "#/$defs/child"
++                      },
++                      "description": "Child sub-issues (inherit root project and enclosing parent; omit project and parent)"
++                    }
++                  },
++                  "required": [
++                    "project",
++                    "summary"
++                  ],
++                  "additionalProperties": false
++                }
++              },
++              {
++                "name": "update_ticket",
++                "description": "Update ticket.",
++                "inputSchema": {
++                  "type": "object",
++                  "properties": {
++                    "identifier": {
++                      "type": "string"
++                    },
++                    "if_match": {
++                      "type": "string",
++                      "pattern": "^[0-9a-f]{64}$",
++                      "description": "ETag for description_markdown"
++                    },
++                    "summary": {
++                      "type": "string",
++                      "minLength": 1,
++                      "maxLength": 500
++                    },
++                    "description_markdown": {
++                      "type": "string",
++                      "description": "Markdown (if_match)"
++                    },
++                    "description_mode": {
++                      "type": "string",
++                      "enum": [
++                        "append",
++                        "replace"
++                      ],
++                      "default": "append"
++                    },
++                    "assignees_add": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20
++                    },
++                    "assignees_remove": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20
++                    },
++                    "priority": {
++                      "type": "string"
++                    },
++                    "start_date": {
++                      "type": [
++                        "string",
++                        "null"
++                      ],
++                      "format": "date"
++                    },
++                    "due_date": {
++                      "type": [
++                        "string",
++                        "null"
++                      ],
++                      "format": "date"
++                    },
++                    "cycle": {
++                      "type": [
++                        "string",
++                        "null"
++                      ]
++                    },
++                    "modules_add": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20
++                    },
++                    "modules_remove": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20
++                    },
++                    "labels_add": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20
++                    },
++                    "labels_remove": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20
++                    },
++                    "parent": {
++                      "type": [
++                        "string",
++                        "null"
++                      ]
++                    },
++                    "fencing_token": {
++                      "type": "integer"
++                    },
++                    "lease_action": {
++                      "type": "string",
++                      "enum": [
++                        "renew",
++                        "release",
++                        "keep"
++                      ]
++                    }
++                  },
++                  "required": [
++                    "identifier"
++                  ],
++                  "additionalProperties": false
++                }
++              },
++              {
++                "name": "begin_work",
++                "description": "Begin work.",
++                "inputSchema": {
++                  "type": "object",
++                  "properties": {
++                    "identifier": {
++                      "type": "string"
++                    },
++                    "plan_markdown": {
++                      "type": "string"
++                    },
++                    "ttl_seconds": {
++                      "type": "integer",
++                      "minimum": 60,
++                      "maximum": 7200
++                    },
++                    "fencing_token": {
++                      "type": "integer"
++                    },
++                    "lease_action": {
++                      "type": "string",
++                      "enum": [
++                        "acquire",
++                        "renew"
++                      ]
++                    },
++                    "use_workpad": {
++                      "type": "boolean",
++                      "default": true
++                    }
++                  },
++                  "required": [
++                    "identifier",
++                    "plan_markdown"
++                  ],
++                  "additionalProperties": false
++                }
++              },
++              {
++                "name": "transition_ticket",
++                "description": "Transition ticket.",
++                "inputSchema": {
++                  "type": "object",
++                  "properties": {
++                    "identifier": {
++                      "type": "string"
++                    },
++                    "to_state": {
++                      "type": "string"
++                    },
++                    "comment_markdown": {
++                      "type": "string"
++                    },
++                    "verification_proof": {
++                      "type": "object",
++                      "description": "Proof packet",
++                      "properties": {
++                        "qa_dir": {
++                          "type": "string",
++                          "pattern": "^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/?$"
++                        },
++                        "artifacts": {
++                          "type": "array",
++                          "minItems": 1,
++                          "maxItems": 50,
++                          "items": {
++                            "type": "string",
++                            "pattern": "^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/[A-Za-z0-9._/-]{1,200}$"
++                          }
++                        },
++                        "reality_checker": {
++                          "type": "object",
++                          "properties": {
++                            "verdict": {
++                              "type": "string",
++                              "enum": [
++                                "READY",
++                                "NEEDS_WORK"
++                              ]
++                            },
++                            "grade": {
++                              "type": "string",
++                              "pattern": "^[A-F]$"
++                            },
++                            "report_path": {
++                              "type": "string",
++                              "pattern": "^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/reality-checker-report\\.md$"
++                            }
++                          },
++                          "required": [
++                            "verdict",
++                            "grade",
++                            "report_path"
++                          ],
++                          "additionalProperties": false
++                        },
++                        "ci_run_url": {
++                          "type": "string",
++                          "maxLength": 2048
++                        }
++                      },
++                      "required": [
++                        "qa_dir",
++                        "artifacts",
++                        "reality_checker",
++                        "ci_run_url"
++                      ],
++                      "additionalProperties": false
++                    },
++                    "fencing_token": {
++                      "type": "integer"
++                    },
++                    "lease_action": {
++                      "type": "string",
++                      "enum": [
++                        "renew",
++                        "release",
++                        "keep"
++                      ]
++                    }
++                  },
++                  "required": [
++                    "identifier",
++                    "to_state"
++                  ],
++                  "additionalProperties": false
++                }
++              },
++              {
++                "name": "complete_work",
++                "description": "Complete work.",
++                "inputSchema": {
++                  "type": "object",
++                  "properties": {
++                    "identifier": {
++                      "type": "string"
++                    },
++                    "summary_markdown": {
++                      "type": "string"
++                    },
++                    "verification_proof": {
++                      "type": "object",
++                      "description": "Proof packet",
++                      "properties": {
++                        "qa_dir": {
++                          "type": "string",
++                          "pattern": "^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/?$"
++                        },
++                        "artifacts": {
++                          "type": "array",
++                          "minItems": 1,
++                          "maxItems": 50,
++                          "items": {
++                            "type": "string",
++                            "pattern": "^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/[A-Za-z0-9._/-]{1,200}$"
++                          }
++                        },
++                        "reality_checker": {
++                          "type": "object",
++                          "properties": {
++                            "verdict": {
++                              "type": "string",
++                              "enum": [
++                                "READY",
++                                "NEEDS_WORK"
++                              ]
++                            },
++                            "grade": {
++                              "type": "string",
++                              "pattern": "^[A-F]$"
++                            },
++                            "report_path": {
++                              "type": "string",
++                              "pattern": "^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/reality-checker-report\\.md$"
++                            }
++                          },
++                          "required": [
++                            "verdict",
++                            "grade",
++                            "report_path"
++                          ],
++                          "additionalProperties": false
++                        },
++                        "ci_run_url": {
++                          "type": "string",
++                          "maxLength": 2048
++                        }
++                      },
++                      "required": [
++                        "qa_dir",
++                        "artifacts",
++                        "reality_checker",
++                        "ci_run_url"
++                      ],
++                      "additionalProperties": false
++                    },
++                    "to_state": {
++                      "type": "string"
++                    },
++                    "fencing_token": {
++                      "type": "integer"
++                    },
++                    "lease_action": {
++                      "type": "string",
++                      "enum": [
++                        "release",
++                        "keep",
++                        "renew"
++                      ]
++                    }
++                  },
++                  "required": [
++                    "identifier",
++                    "summary_markdown",
++                    "verification_proof"
++                  ],
++                  "additionalProperties": false
++                }
++              },
++              {
++                "name": "add_comment",
++                "description": "Add comment.",
++                "inputSchema": {
++                  "type": "object",
++                  "properties": {
++                    "identifier": {
++                      "type": "string",
++                      "description": "Issue ref"
++                    },
++                    "body_markdown": {
++                      "type": "string",
++                      "description": "Body markdown"
++                    },
++                    "reply_to": {
++                      "type": "string",
++                      "description": "Reply to ID"
++                    },
++                    "ack_mentions": {
++                      "type": "boolean",
++                      "default": false,
++                      "description": "Ack mentions"
++                    }
++                  },
++                  "required": [
++                    "identifier",
++                    "body_markdown"
++                  ],
++                  "additionalProperties": false
++                }
++              },
++              {
++                "name": "link_objects",
++                "description": "Link objects.",
++                "inputSchema": {
++                  "type": "object",
++                  "properties": {
++                    "source": {
++                      "type": "string",
++                      "description": "Source ref"
++                    },
++                    "target": {
++                      "type": "string",
++                      "description": "Target ref"
++                    },
++                    "link_type": {
++                      "type": "string",
++                      "description": "Link kind"
++                    },
++                    "action": {
++                      "type": "string",
++                      "enum": [
++                        "add",
++                        "remove"
++                      ],
++                      "default": "add",
++                      "description": "add or remove"
++                    }
++                  },
++                  "required": [
++                    "source",
++                    "target",
++                    "link_type"
++                  ],
++                  "additionalProperties": false
++                }
++              },
++              {
++                "name": "update_workpad",
++                "description": "Update workpad.",
++                "inputSchema": {
++                  "type": "object",
++                  "properties": {
++                    "identifier": {
++                      "type": "string"
++                    },
++                    "body_markdown": {
++                      "type": "string"
++                    },
++                    "revision": {
++                      "type": "integer"
++                    }
++                  },
++                  "required": [
++                    "identifier",
++                    "body_markdown"
++                  ],
++                  "additionalProperties": false
++                }
++              }
++            ]
++          }
++        }
++      }
++    },
++    {
++      "name": "condition_a_create_ticket",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/agent",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "mcp-session-id": "pBQrWheuJ57yIaKmQbmJd599cIhciG39G6q98SsZE7c",
++          "content-length": "201",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 4,
++          "method": "tools/call",
++          "params": {
++            "name": "create_ticket",
++            "arguments": {
++              "project": "QAUSR1",
++              "summary": "QA Disposable Ticket",
++              "description_markdown": "Test verification description"
++            }
++          }
++        }
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "241",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 4,
++          "result": {
++            "content": [
++              {
++                "type": "text",
++                "text": "created: 1\nroot:\n  key: QAUSR1-99\n  issue_key: QAUSR1-99\n  sequence_number: 99\n  summary: QA Disposable Ticket\n  state: open\n  priority: medium\n"
++              }
++            ],
++            "isError": false
++          }
++        }
++      }
++    },
++    {
++      "name": "condition_b_project_autofill",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/agent/w/kanban/p/QAUSR1",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "mcp-session-id": "Xk3Zdvzkx-C5H_UfHq13FcXYGJtyT6Nl0AztOW_l_6M",
++          "content-length": "154",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 21,
++          "method": "tools/call",
++          "params": {
++            "name": "create_ticket",
++            "arguments": {
++              "summary": "Project Pinned Ticket Without Explicit Project"
++            }
++          }
++        }
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "268",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 21,
++          "result": {
++            "content": [
++              {
++                "type": "text",
++                "text": "created: 1\nroot:\n  key: QAUSR1-99\n  issue_key: QAUSR1-99\n  sequence_number: 99\n  summary: Project Pinned Ticket Without Explicit Project\n  state: open\n  priority: medium\n"
++              }
++            ],
++            "isError": false
++          }
++        }
++      }
++    },
++    {
++      "name": "condition_b_cross_project_blocked",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/agent/w/kanban/p/QAUSR1",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "mcp-session-id": "Xk3Zdvzkx-C5H_UfHq13FcXYGJtyT6Nl0AztOW_l_6M",
++          "content-length": "158",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 22,
++          "method": "tools/call",
++          "params": {
++            "name": "create_ticket",
++            "arguments": {
++              "project": "QAADM",
++              "summary": "Forbidden Cross Project Mutation"
++            }
++          }
++        }
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "559",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 22,
++          "result": {
++            "content": [
++              {
++                "type": "text",
++                "text": "error:\n  code: CONNECTION_SCOPE_VIOLATION\n  message: Connection is strictly pinned to project 'QAUSR1'. Mutation targeting foreign project 'QAADM' was blocked.\n  hint: Connect to /mcp/agent/w/kanban/p/QAADM or run in Global mode (/mcp/agent) to operate across projects.\n  fix_hint: Connect to /mcp/agent/w/kanban/p/QAADM or run in Global mode (/mcp/agent) to operate across projects.\n  pinned_scope: {workspace: kanban, project: QAUSR1}\n  attempted_target: QAADM\n"
++              }
++            ],
++            "isError": true
++          }
++        }
++      }
++    },
++    {
++      "name": "condition_c_workspace_wide_rejected",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/agent/w/kanban",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "content-length": "59",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 32,
++          "method": "initialize",
++          "params": {}
++        }
++      },
++      "response": {
++        "status": 403,
++        "headers": {
++          "content-length": "155",
++          "content-type": "application/json"
++        },
++        "body": {
++          "error": "KEY_SCOPE_VIOLATION",
++          "message": "Token is pinned to specific project(s) and cannot connect in workspace-wide mode.",
++          "allowed_projects": [
++            "QAUSR1"
++          ]
++        }
++      }
++    },
++    {
++      "name": "condition_c_wrong_project_rejected",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/agent/w/kanban/p/QAADM",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "content-length": "59",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 33,
++          "method": "initialize",
++          "params": {}
++        }
++      },
++      "response": {
++        "status": 403,
++        "headers": {
++          "content-length": "205",
++          "content-type": "application/json"
++        },
++        "body": {
++          "error": "KEY_SCOPE_VIOLATION",
++          "message": "Requested project 'QAADM' is outside the scope boundary of this API key.",
++          "allowed_projects": [
++            "QAUSR1"
++          ],
++          "hint": "Use an API key with permissions for this project."
++        }
++      }
++    },
++    {
++      "name": "condition_c_readonly_write_blocked",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/agent/w/kanban/p/QAUSR1",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "mcp-session-id": "6mgIQS41kKQJ5V_jerqyDkF8umTBsenrcaefGf4R1w4",
++          "content-length": "143",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 36,
++          "method": "tools/call",
++          "params": {
++            "name": "create_ticket",
++            "arguments": {
++              "summary": "Unauthorized Write on Read-Only Key"
++            }
++          }
++        }
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "482",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 36,
++          "result": {
++            "content": [
++              {
++                "type": "text",
++                "text": "error:\n  code: INSUFFICIENT_SCOPE\n  message: Tool 'create_ticket' requires capability EDIT (4), which is masked out by capability_mask (1)\n  hint: Request an API key or token with EDIT capability bit enabled.\n  fix_hint: Request an API key or token with EDIT capability bit enabled.\n  reason: INSUFFICIENT_CAPABILITY\n  required_capability: EDIT\n  required_bit: 4\n  capability_mask: 1\n"
++              }
++            ],
++            "isError": true
++          }
++        }
++      }
++    },
++    {
++      "name": "condition_d_tool_filtering",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/agent/w/kanban/p/QAADM",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "mcp-session-id": "nJ4P0A1FRSA4iNRtU5a7DOWqTLKrhx0qmOIRISDJY5g",
++          "content-length": "47",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 46,
++          "method": "tools/list"
++        }
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "1819",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 46,
++          "result": {
++            "tools": [
++              {
++                "name": "search_tickets",
++                "description": "Search tickets.",
++                "inputSchema": {
++                  "type": "object",
++                  "properties": {
++                    "query": {
++                      "type": "string",
++                      "maxLength": 500,
++                      "description": "Search query"
++                    },
++                    "workspace": {
++                      "type": "string",
++                      "description": "Workspace slug"
++                    },
++                    "project": {
++                      "type": "string",
++                      "description": "Project ref"
++                    },
++                    "states": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20,
++                      "description": "State filters"
++                    },
++                    "assignees": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20,
++                      "description": "Assignee filters"
++                    },
++                    "cycle": {
++                      "type": "string",
++                      "description": "Cycle filter"
++                    },
++                    "modules": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20,
++                      "description": "Module filters"
++                    },
++                    "labels": {
++                      "type": "array",
++                      "items": {
++                        "type": "string"
++                      },
++                      "maxItems": 20,
++                      "description": "Label filters"
++                    },
++                    "blocked": {
++                      "type": "boolean",
++                      "description": "Blocked filter"
++                    },
++                    "gate_status": {
++                      "type": "string",
++                      "enum": [
++                        "pending",
++                        "approved",
++                        "rejected"
++                      ],
++                      "description": "Gate status filter"
++                    },
++                    "mode": {
++                      "type": "string",
++                      "enum": [
++                        "lexical",
++                        "hybrid"
++                      ],
++                      "default": "lexical",
++                      "description": "Search mode"
++                    },
++                    "lod": {
++                      "type": "string",
++                      "enum": [
++                        "summary",
++                        "standard"
++                      ],
++                      "default": "summary",
++                      "description": "LOD tier"
++                    },
++                    "limit": {
++                      "type": "integer",
++                      "minimum": 1,
++                      "maximum": 50,
++                      "default": 20,
++                      "description": "Max results"
++                    },
++                    "cursor": {
++                      "type": "string",
++                      "maxLength": 200,
++                      "description": "Cursor"
++                    }
++                  },
++                  "additionalProperties": false
++                }
++              },
++              {
++                "name": "read_ticket",
++                "description": "Read ticket.",
++                "inputSchema": {
++                  "type": "object",
++                  "properties": {
++                    "identifier": {
++                      "type": "string",
++                      "description": "Issue ref"
++                    },
++                    "workspace": {
++                      "type": "string",
++                      "description": "Workspace"
++                    },
++                    "lod": {
++                      "type": "string",
++                      "enum": [
++                        "summary",
++                        "standard",
++                        "full"
++                      ],
++                      "default": "standard",
++                      "description": "LOD tier"
++                    },
++                    "comments_limit": {
++                      "type": "integer",
++                      "minimum": 0,
++                      "maximum": 50,
++                      "default": 20,
++                      "description": "Max comments"
++                    }
++                  },
++                  "required": [
++                    "identifier"
++                  ],
++                  "additionalProperties": false
++                }
++              }
++            ]
++          }
++        }
++      }
++    },
++    {
++      "name": "condition_d_capability_mask_blocked",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/agent/w/kanban/p/QAADM",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "mcp-session-id": "aC6ofEoKfvqgafe_70V8GDQ6lhNerYS_3qsDluUApE0",
++          "content-length": "140",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 49,
++          "method": "tools/call",
++          "params": {
++            "name": "create_ticket",
++            "arguments": {
++              "summary": "Write Blocked by Capability Mask"
++            }
++          }
++        }
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "482",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 49,
++          "result": {
++            "content": [
++              {
++                "type": "text",
++                "text": "error:\n  code: INSUFFICIENT_SCOPE\n  message: Tool 'create_ticket' requires capability EDIT (4), which is masked out by capability_mask (1)\n  hint: Request an API key or token with EDIT capability bit enabled.\n  fix_hint: Request an API key or token with EDIT capability bit enabled.\n  reason: INSUFFICIENT_CAPABILITY\n  required_capability: EDIT\n  required_bit: 4\n  capability_mask: 1\n"
++              }
++            ],
++            "isError": true
++          }
++        }
++      }
++    },
++    {
++      "name": "condition_e_surface_isolation_mismatch",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/admin",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "content-length": "2",
++          "content-type": "application/json"
++        },
++        "body": {}
++      },
++      "response": {
++        "status": 403,
++        "headers": {
++          "content-length": "32",
++          "content-type": "application/json"
++        },
++        "body": {
++          "error": "SURFACE_KEY_MISMATCH"
++        }
++      }
++    },
++    {
++      "name": "condition_e_stage1_destructive_request",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/admin",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "mcp-session-id": "wWJIpcbkt-Gg39EVZNW6qcuFXwGp6j9SktCKqVA2Me8",
++          "content-length": "186",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 61,
++          "method": "tools/call",
++          "params": {
++            "name": "destructive_lifecycle",
++            "arguments": {
++              "action": "request_delete",
++              "target_kind": "issue",
++              "target": "QAADM-99",
++              "mode": "trash"
++            }
++          }
++        }
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "322",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 61,
++          "result": {
++            "content": [
++              {
++                "type": "text",
++                "text": "stage: confirmation_required\ntarget: QAADM-99\ntarget_kind: issue\nmode: trash\nblast_summary: 1 issue and related objects will be deleted\nconfirm_phrase: PURGE QAADM-99\nconfirmation_token: tok_702908387eb0\nexpires_in_sec: 300\n"
++              }
++            ],
++            "isError": false
++          }
++        }
++      }
++    },
++    {
++      "name": "condition_e_stage2_destructive_execute",
++      "request": {
++        "method": "POST",
++        "path": "/mcp/admin",
++        "headers": {
++          "host": "test",
++          "accept": "*/*",
++          "accept-encoding": "gzip, deflate",
++          "connection": "keep-alive",
++          "user-agent": "python-httpx/0.28.1",
++          "authorization": "<redacted>",
++          "mcp-session-id": "wWJIpcbkt-Gg39EVZNW6qcuFXwGp6j9SktCKqVA2Me8",
++          "content-length": "318",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 62,
++          "method": "tools/call",
++          "params": {
++            "name": "destructive_lifecycle",
++            "arguments": {
++              "action": "execute_delete",
++              "target_kind": "issue",
++              "target": "QAADM-99",
++              "mode": "trash",
++              "confirmation_token": "tok_702908387eb0",
++              "confirm_phrase": "PURGE QAADM-99",
++              "reason": "Authorized forensic test cleanup for KANBA-205"
++            }
++          }
++        }
++      },
++      "response": {
++        "status": 200,
++        "headers": {
++          "content-length": "215",
++          "content-type": "application/json"
++        },
++        "body": {
++          "jsonrpc": "2.0",
++          "id": 62,
++          "result": {
++            "content": [
++              {
++                "type": "text",
++                "text": "status: executed\ntarget: QAADM-99\ntarget_kind: issue\nmode: trash\nreason: Authorized forensic test cleanup for KANBA-205\n"
++              }
++            ],
++            "isError": false
++          }
++        }
++      }
++    },
+     {
+       "name": "condition_f_unauthenticated_agent_401",
+       "request": {
+@@ -148,7 +1592,7 @@
+           "connection": "keep-alive",
+           "user-agent": "python-httpx/0.28.1",
+           "authorization": "<redacted>",
+-          "mcp-session-id": "Run-XnA7lfxpmKUPeO2dcJXFnpEkdkc-cFv8iXyoapc",
++          "mcp-session-id": "kfv0uwcJ0FrpqWxsjkcbEZ17UeB2XCLi3yQkewoNQmU",
+           "content-length": "47",
+           "content-type": "application/json"
+         },
+@@ -178,7 +1622,7 @@
+           "connection": "keep-alive",
+           "user-agent": "python-httpx/0.28.1",
+           "authorization": "<redacted>",
+-          "mcp-session-id": "Run-XnA7lfxpmKUPeO2dcJXFnpEkdkc-cFv8iXyoapc",
++          "mcp-session-id": "kfv0uwcJ0FrpqWxsjkcbEZ17UeB2XCLi3yQkewoNQmU",
+           "content-length": "47",
+           "content-type": "application/json"
+         },
+@@ -196,56 +1640,6 @@
+         "body": "Session bound to different token"
+       }
+     },
+-    {
+-      "name": "condition_f_taint_guard_rejection",
+-      "request": {
+-        "method": "POST",
+-        "path": "/mcp/agent/w/kanban",
+-        "headers": {
+-          "host": "test",
+-          "accept": "*/*",
+-          "accept-encoding": "gzip, deflate",
+-          "connection": "keep-alive",
+-          "user-agent": "python-httpx/0.28.1",
+-          "authorization": "<redacted>",
+-          "mcp-session-id": "6ST6JvXlxQY6-vdpdPPiAB--Hw1BCYg1lO9nJN3KFI8",
+-          "content-length": "149",
+-          "content-type": "application/json"
+-        },
+-        "body": {
+-          "jsonrpc": "2.0",
+-          "id": 76,
+-          "method": "tools/call",
+-          "params": {
+-            "name": "create_ticket",
+-            "arguments": {
+-              "project": "QAADM",
+-              "summary": "TRIGGER_TAINT_REJECTION"
+-            }
+-          }
+-        }
+-      },
+-      "response": {
+-        "status": 200,
+-        "headers": {
+-          "content-length": "268",
+-          "content-type": "application/json"
+-        },
+-        "body": {
+-          "jsonrpc": "2.0",
+-          "id": 76,
+-          "result": {
+-            "content": [
+-              {
+-                "type": "text",
+-                "text": "error: {code: CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED, message: 'Write targeting project ''QAADM'' blocked: audience is broader\n    than previously inspected tainted project.'}\n"
+-              }
+-            ],
+-            "isError": true
+-          }
+-        }
+-      }
+-    },
+     {
+       "name": "condition_f_revocation_post_ttl_401",
+       "request": {
+@@ -343,7 +1737,6 @@
+       "missing_workspace_status": 400,
+       "missing_workspace_error": "VALIDATION_FAILED",
+       "session_replay_rejection": 404,
+-      "taint_guard_rejection": "409 CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED",
+       "ttl_revocation_status": 401
+     }
+   },
 diff --git a/kanban/api/deps.py b/kanban/api/deps.py
 index 957a8196..2ea72474 100644
 --- a/kanban/api/deps.py
@@ -2376,18 +3983,19 @@ index b6656bb0..00000000
 -    """Dependency provider for TaintGuard."""
 -    return TaintGuard(request, session, caller)
 diff --git a/kanban/services/activity.py b/kanban/services/activity.py
-index 3c505861..b931fdcb 100644
+index 3c505861..2df8402b 100644
 --- a/kanban/services/activity.py
 +++ b/kanban/services/activity.py
-@@ -212,6 +212,7 @@ class ActivityEventType(StrEnum):
+@@ -212,6 +212,8 @@ class ActivityEventType(StrEnum):
      ACL_ENTRY_REVOKED = "ACL_ENTRY_REVOKED"
      DESTRUCTIVE_LIFECYCLE_EXECUTED = "DESTRUCTIVE_LIFECYCLE_EXECUTED"
      CRYPTO_SHRED_EXECUTED = "CRYPTO_SHRED_EXECUTED"
-+    # Deprecated / historical-only: kept so existing immutable activity_records deserialize cleanly
++    # DEPRECATED (KAN-535): stateful read-taint was removed and this event is never emitted.
++    # Kept only so historical immutable activity_records rows still deserialize.
      MCP_TAINT_BLOCKED = "MCP_TAINT_BLOCKED"
      SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"
      ISSUE_BULK_EXPORTED = "ISSUE_BULK_EXPORTED"
-@@ -483,6 +484,8 @@ _UNENCRYPTED_EVENT_TYPES: Final[frozenset[str]] = frozenset(
+@@ -483,6 +485,8 @@ _UNENCRYPTED_EVENT_TYPES: Final[frozenset[str]] = frozenset(
          "DESTRUCTIVE_LIFECYCLE_EXECUTED",
          "INVALID_OBJECT_LINK_PURGED",
          "CRYPTO_SHRED_EXECUTED",
@@ -4613,10 +6221,26 @@ index 00000000..99eec84f
 +    ).scalar_one()
 +    assert kan_issues_count >= 1
 diff --git a/kanban/tests/security/test_untrusted_content_taint.py b/kanban/tests/security/test_untrusted_content_taint.py
-index 8bc0ef4a..76e2a005 100644
+index 8bc0ef4a..cba00531 100644
 --- a/kanban/tests/security/test_untrusted_content_taint.py
 +++ b/kanban/tests/security/test_untrusted_content_taint.py
-@@ -15,7 +15,6 @@ Covers:
+@@ -3,19 +3,15 @@
+ # ruff: noqa: E501
+ """Security tests for provenance trust tiers and untrusted content taint tracking (KAN-70).
+ 
+-Covers:
+-  1. Positive: Reading trusted_member content in Project A permits subsequent mutations in Project A.
+-  2. Negative: Reading untrusted content (imported/webhook) in Project A blocks subsequent mutations
+-     in Project A (and all projects) with 409 UNTRUSTED_CONTENT_TAINT_ACTIVE and emits MCP_TAINT_BLOCKED.
+-  3. Bypass: Supplying an explicit human confirmation token permits mutations despite active untrusted taint.
+-  4. Self-upgrade: Untrusted ingestion channels attempting to claim trusted_member/verified_agent
++Covers provenance trust tiers only (stateful read-taint was removed in KAN-535):
++  1. Reading trusted_member content permits subsequent mutations.
++  2. Reading untrusted content does not block later mutations (no stateful taint).
++  3. Self-upgrade: Untrusted ingestion channels attempting to claim trusted_member/verified_agent
+      are rejected with 403 PROVENANCE_SELF_UPGRADE_FORBIDDEN.
+-  5. Comments: An untrusted comment on an issue causes comment listing to propagate untrusted taint.
+ """
  
  from __future__ import annotations
  
@@ -4624,7 +6248,7 @@ index 8bc0ef4a..76e2a005 100644
  import os
  import uuid
  from typing import TYPE_CHECKING, Any
-@@ -267,7 +266,6 @@ async def test_case_1_positive_trusted_same_project_workflow(
+@@ -267,7 +263,6 @@ async def test_case_1_positive_trusted_same_project_workflow(
  ) -> None:
      """Case 1: Reading trusted content in Project ALPHA allows subsequent mutations in ALPHA."""
      client: httpx.AsyncClient = untrusted_taint_env["client"]
@@ -4632,7 +6256,7 @@ index 8bc0ef4a..76e2a005 100644
      alpha_1_id = untrusted_taint_env["alpha_1_id"]
      tok_alice = untrusted_taint_env["tok_alice"]
      session_id = f"mcp-sess-{uuid.uuid4()}"
-@@ -284,21 +282,6 @@ async def test_case_1_positive_trusted_same_project_workflow(
+@@ -284,21 +279,6 @@ async def test_case_1_positive_trusted_same_project_workflow(
      assert resp.status_code == 200
      assert "X-Kanban-Untrusted-Taint" not in resp.headers
  
@@ -4654,7 +6278,7 @@ index 8bc0ef4a..76e2a005 100644
      # Mutating operation in ALPHA succeeds
      patch_resp = await client.patch(
          f"/api/v1/issues/{alpha_1_id}",
-@@ -317,9 +300,8 @@ async def test_case_1_positive_trusted_same_project_workflow(
+@@ -317,9 +297,8 @@ async def test_case_1_positive_trusted_same_project_workflow(
  async def test_case_2_negative_untrusted_same_project_mutation_blocked(
      untrusted_taint_env: dict[str, Any],
  ) -> None:
@@ -4665,7 +6289,7 @@ index 8bc0ef4a..76e2a005 100644
      alpha_2_id = untrusted_taint_env["alpha_2_id"]
      tok_alice = untrusted_taint_env["tok_alice"]
      session_id = f"mcp-sess-{uuid.uuid4()}"
-@@ -334,25 +316,10 @@ async def test_case_2_negative_untrusted_same_project_mutation_blocked(
+@@ -334,25 +313,10 @@ async def test_case_2_negative_untrusted_same_project_mutation_blocked(
          },
      )
      assert resp.status_code == 200
@@ -4694,7 +6318,7 @@ index 8bc0ef4a..76e2a005 100644
          "/api/v1/projects/ALPHA/issues",
          json={"summary": "Agent Generated Task", "description_markdown": "Payload"},
          headers={
-@@ -361,35 +328,21 @@ async def test_case_2_negative_untrusted_same_project_mutation_blocked(
+@@ -361,35 +325,21 @@ async def test_case_2_negative_untrusted_same_project_mutation_blocked(
              "X-KB-Subject-Token": tok_alice,
          },
      )
@@ -4734,7 +6358,7 @@ index 8bc0ef4a..76e2a005 100644
      await client.get(
          f"/api/v1/issues/{alpha_2_id}",
          headers={
-@@ -464,7 +417,7 @@ async def test_case_4_provenance_self_upgrade_forbidden(
+@@ -464,7 +414,7 @@ async def test_case_4_provenance_self_upgrade_forbidden(
  async def test_case_5_untrusted_comment_taint_propagation(
      untrusted_taint_env: dict[str, Any],
  ) -> None:
@@ -4743,7 +6367,7 @@ index 8bc0ef4a..76e2a005 100644
      client: httpx.AsyncClient = untrusted_taint_env["client"]
      alpha_1_id = untrusted_taint_env["alpha_1_id"]
      tok_alice = untrusted_taint_env["tok_alice"]
-@@ -491,17 +444,17 @@ async def test_case_5_untrusted_comment_taint_propagation(
+@@ -491,17 +441,17 @@ async def test_case_5_untrusted_comment_taint_propagation(
          },
      )
      assert list_resp.status_code == 200
@@ -5208,10 +6832,10 @@ index 06f71c13..43fd2cfd 100644
      )
      ident = (
 diff --git a/mcp/tests/agent/test_add_comment.py b/mcp/tests/agent/test_add_comment.py
-index 06cb7e69..486207fb 100644
+index 06cb7e69..33981eea 100644
 --- a/mcp/tests/agent/test_add_comment.py
 +++ b/mcp/tests/agent/test_add_comment.py
-@@ -323,7 +323,7 @@ async def test_case_7_add_comment_reply_and_help_action(agent_test_env: AgentTes
+@@ -323,17 +323,17 @@ async def test_case_7_add_comment_reply_and_help_action(agent_test_env: AgentTes
  
  
  @pytest.mark.asyncio
@@ -5220,6 +6844,20 @@ index 06cb7e69..486207fb 100644
      agent_test_env: AgentTestEnv,
  ) -> None:
      """Case 8: Full MCP canary exfiltration sequence.
+ 
+     1. Initialize session 1 with token_admin.
+     2. read_ticket SEC-1 containing secret canary CANARY-7f3a.
+-    3. add_comment on PUB-1 attempting to leak CANARY-7f3a -> 409 CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED.
+-    4. Session-escape attempt: Initialize session 2 with token_admin and retry add_comment -> blocked.
+-    5. Clean principal: Initialize session 3 with token_adam and add_comment on PUB-1 -> succeeds.
+-    6. Forensic DB verification: 0 comments contain CANARY-7f3a, MCP_TAINT_BLOCKED activity recorded.
++    3. add_comment on PUB-1 with the canary text: no stateful read-taint blocks the call.
++    4. Repeat on a second session with token_admin.
++    5. Clean principal: Initialize session 3 with token_adam and add_comment on PUB-1.
++    6. Forensic DB verification of resulting comments (see assertions below).
+     """
+     env = agent_test_env
+ 
 @@ -378,7 +378,7 @@ async def test_case_8_mcp_transcript_and_canary_exfiltration(  # noqa: PLR0915
      read_text = read_data["result"]["content"][0]["text"]
      assert "CANARY-7f3a" in read_text

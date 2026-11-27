@@ -212,7 +212,8 @@ class ActivityEventType(StrEnum):
     ACL_ENTRY_REVOKED = "ACL_ENTRY_REVOKED"
     DESTRUCTIVE_LIFECYCLE_EXECUTED = "DESTRUCTIVE_LIFECYCLE_EXECUTED"
     CRYPTO_SHRED_EXECUTED = "CRYPTO_SHRED_EXECUTED"
-    # Deprecated / historical-only: kept so existing immutable activity_records deserialize cleanly
+    # DEPRECATED (KAN-535): stateful read-taint was removed and this event is never emitted.
+    # Kept only so historical immutable activity_records rows still deserialize.
     MCP_TAINT_BLOCKED = "MCP_TAINT_BLOCKED"
     SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"
     ISSUE_BULK_EXPORTED = "ISSUE_BULK_EXPORTED"
