@@ -670,10 +670,24 @@ describe('IssuesWorkspaceRoute', () => {
     });
 
     // KAN-464: Collapsible advanced fields in Create Module form
-    const advancedDetails = document.querySelector('details.kb-modules-advanced-fields');
+    const advancedDetails = document.querySelector<HTMLDetailsElement>('details.kb-modules-advanced-fields');
     expect(advancedDetails).not.toBeNull();
+    expect(advancedDetails?.open).toBe(false);
     const summary = advancedDetails?.querySelector('summary');
     expect(summary?.textContent).toContain('Optional Dates & Description');
+
+    // Toggle details to open
+    act(() => {
+      summary?.click();
+    });
+    expect(advancedDetails?.open).toBe(true);
+
+    // Verify getByLabelText for all 5 Create Module controls
+    expect(screen.getByLabelText('Module Name')).toBe(screen.getByTestId('new-module-name-input'));
+    expect(screen.getByLabelText('Status')).toBe(screen.getByTestId('new-module-status-select'));
+    expect(screen.getByLabelText('Start Date')).toBe(screen.getByTestId('new-module-start-input'));
+    expect(screen.getByLabelText('Target Date')).toBe(screen.getByTestId('new-module-target-input'));
+    expect(screen.getByLabelText('Description')).toBe(screen.getByTestId('new-module-desc-input'));
   });
 
   it('renders ProjectViewsRedirect, ProjectSavedViewsView, and fallback views without query client', () => {
