@@ -10,6 +10,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { apiFetch } from '../../api/client';
 import { qk } from '../../api/queryKeys';
 import { announce } from '../../api/RealtimeStatus';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import type { IssueDetail } from '../drawer/slots';
 import { copyIssue, type CopyIssueResponse } from './actionsApi';
 import './drawerActions.css';
@@ -59,6 +60,9 @@ export function MakeCopyDialog({ issue, open, onClose }: MakeCopyDialogProps): J
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent): void {
+      if (document.querySelector('.kb-help-drawer')) {
+        return;
+      }
       if (e.key === 'Escape') {
         handleClose();
       }
@@ -119,7 +123,16 @@ export function MakeCopyDialog({ issue, open, onClose }: MakeCopyDialogProps): J
   }
 
   return (
-    <div className="modal-backdrop" onClick={handleClose} data-testid="make-copy-backdrop">
+    <div
+      className="modal-backdrop"
+      onClick={() => {
+        if (document.querySelector('.kb-help-drawer')) {
+          return;
+        }
+        handleClose();
+      }}
+      data-testid="make-copy-backdrop"
+    >
       <div
         className="modal-card make-copy-dialog"
         role="dialog"
@@ -132,14 +145,21 @@ export function MakeCopyDialog({ issue, open, onClose }: MakeCopyDialogProps): J
           <h2 id="make-copy-dialog-title" className="modal-title">
             Make a Copy
           </h2>
-          <button
-            type="button"
-            className="modal-close-btn"
-            aria-label="Close dialog"
-            onClick={handleClose}
-          >
-            ×
-          </button>
+          <div className="modal-header-actions">
+            <StudioDocLink
+              href="/docs/ticket-screen-and-work-item-features#duplication-and-copying"
+              label="Duplication Guide ->"
+              testId="make-copy-doc-link"
+            />
+            <button
+              type="button"
+              className="modal-close-btn"
+              aria-label="Close dialog"
+              onClick={handleClose}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="copy-checkbox-list">
@@ -159,7 +179,9 @@ export function MakeCopyDialog({ issue, open, onClose }: MakeCopyDialogProps): J
               onChange={(e) => { setIncludeSubIssues(e.target.checked); }}
               data-testid="copy-include-sub-issues"
             />
-            <span>Include sub-issues</span>
+            <span>
+              Include sub-issues <span className="make-copy-default-indicator">(Default: Off)</span>
+            </span>
           </label>
 
           <label className="mute-checkbox-label">
@@ -169,7 +191,9 @@ export function MakeCopyDialog({ issue, open, onClose }: MakeCopyDialogProps): J
               onChange={(e) => { setIncludeAttachments(e.target.checked); }}
               data-testid="copy-include-attachments"
             />
-            <span>Include attachments</span>
+            <span>
+              Include attachments <span className="make-copy-default-indicator">(Default: Off)</span>
+            </span>
           </label>
 
           <label className="mute-checkbox-label">
@@ -179,7 +203,9 @@ export function MakeCopyDialog({ issue, open, onClose }: MakeCopyDialogProps): J
               onChange={(e) => { setLinkAsRelatesTo(e.target.checked); }}
               data-testid="copy-link-relates-to"
             />
-            <span>Link as RELATES_TO</span>
+            <span>
+              Link as RELATES_TO <span className="make-copy-default-indicator">(Default: Off)</span>
+            </span>
           </label>
 
           <p className="copy-notice" data-testid="copy-creator-notice">

@@ -386,6 +386,35 @@
   max-width: 480px;
 }
 
+.modal-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.make-copy-dialog .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  flex-wrap: wrap;
+}
+
+.make-copy-dialog .modal-close-btn {
+  min-height: 32px;
+  min-width: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.make-copy-default-indicator {
+  font-size: var(--text-xs, 12px);
+  color: var(--fg-muted);
+  font-weight: 400;
+  margin-left: var(--space-1, 4px);
+}
+
 .blast-radius-modal {
   max-width: 520px;
 }
@@ -531,7 +560,7 @@
   padding: 0 var(--space-3, 12px);
   font-size: var(--text-sm, 13px);
   font-weight: 500;
-  color: #0f172a;
+  color: var(--accent-primary-fg);
   background: var(--accent-primary);
   border: 1px solid transparent;
   border-radius: var(--radius-sm, 6px);
@@ -598,6 +627,10 @@
     align-items: center;
     justify-content: center;
     padding: 0;
+  }
+
+  .make-copy-dialog .mute-checkbox-label {
+    min-height: 44px;
   }
 
   .btn-secondary,

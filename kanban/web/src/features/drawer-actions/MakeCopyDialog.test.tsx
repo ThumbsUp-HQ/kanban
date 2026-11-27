@@ -7,6 +7,7 @@ import { MakeCopyDialog } from './MakeCopyDialog';
 import * as actionsApi from './actionsApi';
 import * as clientModule from '../../api/client';
 import * as RealtimeStatusModule from '../../api/RealtimeStatus';
+import { ShellPanelsProvider, registerShellPanel } from '../../app/shellPanels';
 import type { IssueDetail } from '../drawer/slots';
 
 const mockIssue: IssueDetail = {
@@ -264,6 +265,113 @@ describe('MakeCopyDialog (KB-P3-43, S7.2 8n)', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('copy-error-alert').textContent).toBe('Failed to copy issue');
+    });
+  });
+
+  describe('StudioDocLink and Default Value Indicators (KAN-490)', () => {
+    it('renders StudioDocLink in modal-header with correct href, label, and testId', () => {
+      const onClose = vi.fn();
+      renderComponent({ open: true, onClose });
+
+      const docLink = screen.getByTestId('make-copy-doc-link');
+      expect(docLink).toBeDefined();
+      expect(docLink.getAttribute('href')).toBe(
+        '/docs/ticket-screen-and-work-item-features#duplication-and-copying',
+      );
+      expect(docLink.textContent).toContain('Duplication Guide ->');
+      expect(docLink.closest('.modal-header-actions')).not.toBeNull();
+      // Ensure never nested inside button or label (HTML 4.10.4)
+      expect(docLink.closest('button')).toBeNull();
+      expect(docLink.closest('label')).toBeNull();
+    });
+
+    it('renders explicit (Default: Off) indicator on all 3 copy options', () => {
+      const onClose = vi.fn();
+      renderComponent({ open: true, onClose });
+
+      const subIssuesLabel = screen.getByTestId('copy-include-sub-issues').closest('label');
+      const attachmentsLabel = screen.getByTestId('copy-include-attachments').closest('label');
+      const relatesToLabel = screen.getByTestId('copy-link-relates-to').closest('label');
+
+      expect(subIssuesLabel?.textContent).toContain('Include sub-issues');
+      expect(subIssuesLabel?.textContent).toContain('(Default: Off)');
+      expect(attachmentsLabel?.textContent).toContain('Include attachments');
+      expect(attachmentsLabel?.textContent).toContain('(Default: Off)');
+      expect(relatesToLabel?.textContent).toContain('Link as RELATES_TO');
+      expect(relatesToLabel?.textContent).toContain('(Default: Off)');
+
+      const indicators = document.querySelectorAll('.make-copy-default-indicator');
+      expect(indicators).toHaveLength(3);
+      indicators.forEach((ind) => {
+        expect(ind.textContent).toBe('(Default: Off)');
+      });
+    });
+
+    it('uses ✕ close button character and triggers onClose when clicked', () => {
+      const onClose = vi.fn();
+      renderComponent({ open: true, onClose });
+
+      const closeBtn = screen.getByRole('button', { name: 'Close dialog' });
+      expect(closeBtn.textContent.trim()).toBe('✕');
+      fireEvent.click(closeBtn);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens HelpDrawer when StudioDocLink is clicked inside ShellPanelsProvider', () => {
+      let panelPayload: { href?: string; title?: string } | undefined;
+      const unregister = registerShellPanel('help', ({ arg }: { arg?: unknown; onClose: () => void }) => {
+        panelPayload = arg as { href?: string; title?: string } | undefined;
+        return <div className="kb-help-drawer" data-testid="mock-help-drawer">Help Content</div>;
+      });
+
+      const queryClient = new QueryClient();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN?peek=KAN-142']}>
+            <ShellPanelsProvider>
+              <MakeCopyDialog issue={mockIssue} open={true} onClose={vi.fn()} />
+            </ShellPanelsProvider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const docLink = screen.getByTestId('make-copy-doc-link');
+      fireEvent.click(docLink);
+
+      expect(panelPayload).toBeDefined();
+      expect(panelPayload?.href).toBe(
+        '/docs/ticket-screen-and-work-item-features#duplication-and-copying',
+      );
+      unregister();
+    });
+
+    it('yields Escape key and backdrop click when .kb-help-drawer is open in DOM', () => {
+      const onClose = vi.fn();
+      renderComponent({ open: true, onClose });
+
+      // Simulate .kb-help-drawer being open in DOM
+      const fakeDrawer = document.createElement('div');
+      fakeDrawer.className = 'kb-help-drawer';
+      document.body.appendChild(fakeDrawer);
+
+      // Pressing Escape should yield and NOT call onClose
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(onClose).not.toHaveBeenCalled();
+
+      // Clicking backdrop should yield and NOT call onClose
+      const backdrop = screen.getByTestId('make-copy-backdrop');
+      fireEvent.click(backdrop);
+      expect(onClose).not.toHaveBeenCalled();
+
+      // Remove .kb-help-drawer from DOM
+      document.body.removeChild(fakeDrawer);
+
+      // Now Escape and backdrop click should dismiss dialog
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(onClose).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(backdrop);
+      expect(onClose).toHaveBeenCalledTimes(2);
     });
   });
 });
