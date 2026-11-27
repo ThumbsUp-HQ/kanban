@@ -25,6 +25,7 @@ import { GateActivityRow } from '../gates/GateActivityRow';
 import type { GateActivityItem } from '../gates/types';
 import { CommentCard } from './CommentCard';
 import { CommentComposer } from './CommentComposer';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './activity.css';
 
 export interface ActivitySectionProps {
@@ -172,9 +173,16 @@ export function ActivitySection({
     <section className="activity-section" aria-labelledby="activity-heading">
       {/* Header and 4-Tab Bar */}
       <div className="activity-section__header">
-        <h2 id="activity-heading" className="activity-section__title">
-          Activity
-        </h2>
+        <div className="activity-section__title-row">
+          <h2 id="activity-heading" className="activity-section__title">
+            Activity
+          </h2>
+          <StudioDocLink
+            href="/docs/ticket-screen-and-work-item-features#activity-stream-and-audit-ledger"
+            label="Audit Ledger ->"
+            testId="activity-section-doc-link"
+          />
+        </div>
 
         <div className="activity-tablist" role="tablist" aria-label="Activity filter tabs">
           {TABS.map((tab, idx) => {
