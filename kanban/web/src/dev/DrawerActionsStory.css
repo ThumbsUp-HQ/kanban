@@ -24,7 +24,7 @@
   border: 1px solid var(--border-subtle, #e2e8f0);
   border-radius: var(--radius-lg, 10px);
   box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
-  overflow: hidden;
+  overflow: visible;
 }
 
 .drawer-actions-story__top-row {
@@ -34,6 +34,8 @@
   padding: var(--space-3, 12px) var(--space-4, 16px);
   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
   background: var(--bg-canvas);
+  border-top-left-radius: var(--radius-md, 8px);
+  border-top-right-radius: var(--radius-md, 8px);
 }
 
 .drawer-actions-story__issue-title {
@@ -61,5 +63,12 @@
 
 .drawer-actions-story__body {
   padding: var(--space-6, 24px);
-  min-height: 240px;
+  min-height: 420px;
+}
+
+@media (max-width: 767px) {
+  .drawer-actions-story__top-row {
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+  }
 }

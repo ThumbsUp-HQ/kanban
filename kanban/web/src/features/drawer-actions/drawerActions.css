@@ -45,7 +45,7 @@
 
 .drawer-action-btn--active {
   background: var(--bg-hover);
-  color: var(--accent-primary);
+  color: var(--badge-fg);
   border-color: var(--accent-primary);
 }
 
@@ -605,6 +605,17 @@
   .btn-danger {
     min-height: 44px;
     padding: 0 var(--space-4, 16px);
+  }
+
+  .link-graph-popover {
+    position: fixed;
+    left: var(--space-4, 16px);
+    right: var(--space-4, 16px);
+    top: 96px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - 120px);
+    overflow-y: auto;
   }
 
   .link-graph-header {

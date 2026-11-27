@@ -1,3 +1,39 @@
+diff --git a/kanban/web/src/dev/DrawerActionsStory.css b/kanban/web/src/dev/DrawerActionsStory.css
+index ceb5dc91..8e6eb317 100644
+--- a/kanban/web/src/dev/DrawerActionsStory.css
++++ b/kanban/web/src/dev/DrawerActionsStory.css
+@@ -24,7 +24,7 @@
+   border: 1px solid var(--border-subtle, #e2e8f0);
+   border-radius: var(--radius-lg, 10px);
+   box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
+-  overflow: hidden;
++  overflow: visible;
+ }
+ 
+ .drawer-actions-story__top-row {
+@@ -34,6 +34,8 @@
+   padding: var(--space-3, 12px) var(--space-4, 16px);
+   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+   background: var(--bg-canvas);
++  border-top-left-radius: var(--radius-md, 8px);
++  border-top-right-radius: var(--radius-md, 8px);
+ }
+ 
+ .drawer-actions-story__issue-title {
+@@ -61,5 +63,12 @@
+ 
+ .drawer-actions-story__body {
+   padding: var(--space-6, 24px);
+-  min-height: 240px;
++  min-height: 420px;
++}
++
++@media (max-width: 767px) {
++  .drawer-actions-story__top-row {
++    flex-wrap: wrap;
++    gap: var(--space-2, 8px);
++  }
+ }
 diff --git a/kanban/web/src/features/drawer-actions/LinkGraphAction.test.tsx b/kanban/web/src/features/drawer-actions/LinkGraphAction.test.tsx
 index eeeaf0e3..c94bec02 100644
 --- a/kanban/web/src/features/drawer-actions/LinkGraphAction.test.tsx
@@ -297,9 +333,18 @@ index d653ead7..c933860a 100644
            <div className="link-actions-row">
              <button
 diff --git a/kanban/web/src/features/drawer-actions/drawerActions.css b/kanban/web/src/features/drawer-actions/drawerActions.css
-index 375aa730..87733be7 100644
+index 0aae982b..4d6180cc 100644
 --- a/kanban/web/src/features/drawer-actions/drawerActions.css
 +++ b/kanban/web/src/features/drawer-actions/drawerActions.css
+@@ -45,7 +45,7 @@
+ 
+ .drawer-action-btn--active {
+   background: var(--bg-hover);
+-  color: var(--accent-primary);
++  color: var(--badge-fg);
+   border-color: var(--accent-primary);
+ }
+ 
 @@ -142,6 +142,22 @@
    gap: var(--space-3, 12px);
  }
@@ -323,10 +368,21 @@ index 375aa730..87733be7 100644
  .link-actions-row {
    display: flex;
    gap: var(--space-2, 8px);
-@@ -569,4 +585,9 @@
+@@ -590,4 +606,20 @@
      min-height: 44px;
      padding: 0 var(--space-4, 16px);
    }
++
++  .link-graph-popover {
++    position: fixed;
++    left: var(--space-4, 16px);
++    right: var(--space-4, 16px);
++    top: 96px;
++    width: auto;
++    max-width: none;
++    max-height: calc(100dvh - 120px);
++    overflow-y: auto;
++  }
 +
 +  .link-graph-header {
 +    flex-wrap: wrap;
