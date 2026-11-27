@@ -15,3 +15,14 @@ Reviewer: clean-room, read-only (rv-kan535).
 2. Add a "deprecated" comment on MCP_TAINT_BLOCKED.
 
 Verdict: APPROVED
+
+## Addendum (HEAD 07457355)
+
+Clean-room re-verification of the 3 previously open non-blocking findings, read-only, in source at HEAD:
+- mcp/tests/agent/test_add_comment.py:333 and :381 - docstring/comment now say "no stateful read-taint blocks the call" and "zero taint errors"; the stale taint-block wording is gone.
+- kanban/tests/security/test_untrusted_content_taint.py:6-8 - docstring states "stateful read-taint was removed in KAN-535"; :300 says "read-taint eradicated in KAN-535"; :280 and :316 assert X-Kanban-Untrusted-Taint is absent.
+- kanban/services/activity.py:215-217 - "DEPRECATED (KAN-535): stateful read-taint was removed and this event is never emitted" comment sits on MCP_TAINT_BLOCKED; it is kept for historical rows (also listed under "Deprecated / historical-only" at :488-489).
+
+All 3 findings are resolved. No new API concerns.
+
+Verdict: APPROVED
