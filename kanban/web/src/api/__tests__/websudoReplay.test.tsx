@@ -868,6 +868,7 @@ describe('AdminStudioSubnav Sudo Pill (KAN-404)', () => {
 
   it('covers all WebSudoModalHost keyboard navigation branches and replay expires-at header', async () => {
     vi.useRealTimers();
+    setCsrfToken('test-csrf-token');
     const qc = new QueryClient();
 
     let expiresAtDetail: string | null = null;
