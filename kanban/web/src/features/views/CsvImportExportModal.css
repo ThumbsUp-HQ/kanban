@@ -42,6 +42,7 @@
   justify-content: space-between;
   padding: var(--space-4, 16px) var(--space-5, 20px);
   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+  gap: var(--space-3, 12px);
 }
 
 .kb-csv-modal-heading {
@@ -51,6 +52,13 @@
   color: var(--fg-primary, #0f172a);
 }
 
+.kb-csv-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  flex-shrink: 0;
+}
+
 .kb-csv-modal-close-btn {
   background: none;
   border: none;
@@ -58,13 +66,24 @@
   font-size: 1.25rem;
   line-height: 1;
   cursor: pointer;
-  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tap-min, 44px);
+  min-height: var(--tap-min, 44px);
+  padding: var(--space-2, 8px);
   border-radius: var(--radius-sm, 4px);
+  transition: all 120ms ease;
 }
 
 .kb-csv-modal-close-btn:hover {
   background: var(--bg-hover, #f1f5f9);
   color: var(--fg-primary, #0f172a);
+}
+
+.kb-csv-modal-close-btn:focus-visible {
+  outline: 2px solid var(--focus-ring, #2563eb);
+  outline-offset: 2px;
 }
 
 .kb-csv-modal-tabs {
@@ -92,7 +111,7 @@
 }
 
 .kb-csv-modal-tab--active {
-  color: var(--accent-primary, #3b82f6);
+  color: var(--badge-fg, #2563eb);
   border-bottom-color: var(--accent-primary, #3b82f6);
   font-weight: 600;
 }
@@ -161,6 +180,10 @@
   font-size: 0.875rem;
   color: var(--fg-primary, #1e293b);
   cursor: pointer;
+}
+
+.kb-csv-modal-radio-content {
+  display: block;
 }
 
 .kb-csv-modal-radio-desc {
@@ -381,4 +404,38 @@
 .kb-csv-btn-success:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .kb-csv-modal-backdrop {
+    padding: var(--space-2, 8px);
+  }
+
+  .kb-csv-modal-dialog {
+    max-height: calc(100dvh - var(--space-4, 16px));
+  }
+
+  .kb-csv-modal-header {
+    flex-wrap: wrap;
+    gap: var(--space-2, 8px);
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+  }
+
+  .kb-csv-modal-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 8px);
+  }
+}
+
+@media (max-width: 768px), (pointer: coarse) {
+  .kb-csv-modal-close-btn {
+    min-height: var(--tap-min, 44px);
+    min-width: var(--tap-min, 44px);
+  }
+
+  .kb-csv-btn,
+  .kb-csv-modal-tab {
+    min-height: var(--tap-min, 44px);
+  }
 }
