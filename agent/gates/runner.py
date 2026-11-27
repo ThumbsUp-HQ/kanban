@@ -16,8 +16,9 @@ from sqlalchemy import or_, select, text
 from agent.gates.worker import GateWorker, HarnessRegistry
 from database.models.agent_definition import AgentDefinition
 from database.models.ai import AIProviderConfig
-from database.models.issues import Issue
+from database.models.issues import Issue, IssueComment
 from database.models.projects import Project, WorkflowState
+from database.models.repo_binding import ProjectRepoBinding
 from database.models.workflow import (
     WorkflowHookInvocation,
     WorkflowTransitionExecution,
@@ -36,6 +37,56 @@ __all__ = [
     "GateWorkerRunner",
     "start_gate_worker",
 ]
+
+
+MAX_GATE_COMMENTS = 200
+
+
+async def _load_issue_comments(session: Any, issue_id: uuid.UUID) -> list[dict[str, Any]]:  # noqa: ANN401
+    """Load all non-deleted ticket comments (oldest first, bounded) as plain dicts."""
+    rows = (
+        (
+            await session.execute(
+                select(IssueComment)
+                .where(IssueComment.issue_id == issue_id, IssueComment.deleted_at.is_(None))
+                .order_by(IssueComment.created_at.asc())
+                .limit(MAX_GATE_COMMENTS)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        {
+            "body": c.body_markdown,
+            "author": str(c.author_id),
+            "provenance_tier": c.provenance_tier,
+        }
+        for c in rows
+    ]
+
+
+async def _load_repo_context(session: Any, project_id: uuid.UUID) -> RepoContext | None:  # noqa: ANN401
+    """Resolve a read-only RepoContext from the project's repo binding, or None."""
+    binding = (
+        await session.execute(
+            select(ProjectRepoBinding)
+            .where(ProjectRepoBinding.project_id == project_id)
+            .order_by(ProjectRepoBinding.slug.asc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if binding is None:
+        return None
+    from agent.context.repo_context import resolve_repo_context  # noqa: PLC0415
+    from agent.context.transition_context import RepoContext as _RepoContext  # noqa: PLC0415
+
+    try:
+        resolved = await resolve_repo_context(binding)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Repo context unavailable for project %s: %s", project_id, exc)
+        return None
+    return _RepoContext(head_commit=resolved.head_commit, mirror_path=resolved.mirror_path)
 
 
 class GateWorkerRunner:
@@ -287,7 +338,7 @@ class GateWorkerRunner:
                     hook.allowed_mutable_fields if hook else ("labels", "priority")
                 ),
             }
-            issue_dict = {
+            issue_dict: dict[str, Any] = {
                 "key": (
                     f"{project.identifier}-{issue.sequence_id}"
                     if project and issue
@@ -296,6 +347,11 @@ class GateWorkerRunner:
                 "summary": issue.summary if issue else "",
                 "description_markdown": issue.description_markdown if issue else "",
             }
+            if issue is not None:
+                issue_dict["comments"] = await _load_issue_comments(session, issue.id)
+            repo_ctx = (
+                await _load_repo_context(session, execution.project_id) if execution else None
+            )
             base_timeout = resolve_effective_gate_timeout_ms(
                 hook_timeout_ms=hook.timeout_ms if hook else None,
                 project_default_timeout_ms=project.default_gate_timeout_ms if project else None,
@@ -468,7 +524,7 @@ class GateWorkerRunner:
                             if execution is not None and execution.project_id is not None:
                                 agent_dict["project_id"] = execution.project_id
 
-            return exec_dict, issue_dict, agent_dict, None, None
+            return exec_dict, issue_dict, agent_dict, repo_ctx, None
 
     async def poll_once(self) -> int:  # noqa: C901, PLR0912, PLR0915
         """Poll for pending running gate hook invocations with lease claiming and timeout sweep."""

@@ -1,0 +1,40 @@
+........................................................................ [  9%]
+........................................................................ [ 19%]
+........................................................................ [ 28%]
+........................................................................ [ 38%]
+........................................................................ [ 47%]
+........................................................................ [ 57%]
+........................................................................ [ 66%]
+........................................................................ [ 76%]
+........................................................................ [ 85%]
+........................................................................ [ 95%]
+..................................                                       [100%]
+=============================== warnings summary ===============================
+agent/tests/cli/test_validate_sparkle.py::test_case_6_fault_ttft_timeout_and_db_unreachable
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan538-afd23024/.venv/lib/python3.12/site-packages/pytest_socket/__init__.py:138: UserWarning: A test tried to use socket.socket.
+    raise SocketBlockedError()
+
+agent/tests/remote_runner/test_daemon_e2e.py::test_daemon_server_revocation_4003_halts_with_exit_code_78
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan538-afd23024/.venv/lib/python3.12/site-packages/websockets/exceptions.py:139: DeprecationWarning: ConnectionClosed.code is deprecated; use Protocol.close_code or ConnectionClosed.rcvd.code
+    warnings.warn(  # deprecated in 13.1 - 2024-09-21
+
+agent/tests/sparkle/test_router_endpoint.py::test_csrf_validation_missing_and_mismatch
+agent/tests/sparkle/test_router_endpoint.py::test_csrf_validation_missing_and_mismatch
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/9e0717fe-81d4-4260-b1a8-c35c5f951afb/swarm-b-kan538-afd23024/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                  Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------
+agent/context/transition_context.py     202      5     44      2    97%   93, 340, 449-458
+agent/gates/runner.py                   348      9    108     20    94%   147->150, 150->160, 155->160, 401->527, 404->406, 483->506, 524->527, 576->579, 586->621, 590->592, 592->621, 597->621, 599->621, 618-619, 656->579, 725->729, 730-731, 739, 752-753, 757->761, 788->774, 811->774, 813-814
+agent/harnesses/in_app_sdk.py           185      0     44      3    99%   345->357, 388->390, 390->392
+agent/providers/ollama.py               323     10     84      5    96%   93->107, 97->107, 114-115, 247->252, 275-276, 357-358, 466-467, 519-520
+kanban/workflows/async_gate.py          473     13    122     21    94%   198->206, 397, 467, 497->532, 526, 617->625, 751->750, 754, 758-764, 787->791, 809->817, 941-942, 1057->1065, 1158, 1161->1194, 1262->1265, 1285->1290, 1294->1297, 1334, 1349->1340, 1375-1376, 1404->1367
+---------------------------------------------------------------------------------
+TOTAL                                  1531     37    402     51    95%
+754 passed, 2 deselected, 4 warnings in 117.23s (0:01:57)
+pytest exit 0
