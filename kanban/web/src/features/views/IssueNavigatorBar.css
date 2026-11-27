@@ -52,12 +52,23 @@
 }
 
 .navigator-search-btn,
+.navigator-mode-wrap,
 .navigator-mode-group,
 .navigator-header-mode-group,
 .navigator-csv-actions,
 .state-filter-popover-wrap,
 .navigator-state-trigger {
   flex-shrink: 0;
+}
+
+.navigator-mode-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+}
+
+.navigator-hidden-btn {
+  display: none !important;
 }
 
 .navigator-query-input {

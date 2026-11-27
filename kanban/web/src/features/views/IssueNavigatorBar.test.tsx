@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
+import { ShellPanelsProvider, registerShellPanel, useShellPanels } from '../../app/shellPanels';
 import {
   IssueNavigatorBar,
   NAVIGATOR_HEADER_MODE_STORAGE_KEY,
@@ -694,6 +697,158 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
 
       getItemSpy.mockRestore();
       setItemSpy.mockRestore();
+    });
+  });
+
+  describe('FieldHelpHint, StudioDocLink & Shift-Left Invariants (KAN-477)', () => {
+    it('renders FieldHelpHint and StudioDocLink as accessible adjacent sibling controls (KAN-477)', () => {
+      const { container } = render(
+        <IssueNavigatorBar
+          projectKey="KAN"
+          issues={mockIssues}
+          queryMode="basic"
+        />,
+      );
+
+      // 1. Verify existence of FieldHelpHint trigger and StudioDocLink
+      const searchHelp = screen.getByTestId('search-mode-help');
+      const docLink = screen.getByTestId('issue-navigator-doc-link');
+      expect(searchHelp).toBeDefined();
+      expect(docLink).toBeDefined();
+
+      // 2. HTML 4.10.4 Invariants: NEVER nested inside <label> or another <button>
+      expect(searchHelp.closest('label')).toBeNull();
+      expect(searchHelp.closest('button.navigator-mode-btn')).toBeNull();
+      expect(docLink.closest('label')).toBeNull();
+      expect(docLink.closest('button')).toBeNull();
+
+      // Sibling and container check
+      const modeWrap = searchHelp.closest('.navigator-mode-wrap');
+      expect(modeWrap).not.toBeNull();
+      expect(modeWrap?.querySelector('.navigator-mode-group')).not.toBeNull();
+
+      // Strict querySelectorAll assertion mandated by KAN-477 / HTML 4.10.4
+      const invalidNestedElements = container.querySelectorAll(
+        'label button.field-help-hint, button button.field-help-hint, label a.kb-studio-doc-link, button a.kb-studio-doc-link',
+      );
+      expect(invalidNestedElements.length).toBe(0);
+      expect(
+        document.querySelectorAll(
+          'label button.field-help-hint, button button.field-help-hint, label a.kb-studio-doc-link, button a.kb-studio-doc-link',
+        ).length,
+      ).toBe(0);
+
+      // 3. ARIA attributes and link properties
+      expect(searchHelp.getAttribute('aria-label')).toBe('Help for Search Mode');
+      expect(searchHelp.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(docLink.getAttribute('href')).toBe(
+        '/docs/ticket-screen-and-work-item-features#search-and-filtering',
+      );
+      expect(docLink.textContent).toContain('Search Guide ->');
+    });
+
+    it('opens Search Mode FieldHelpHint popover and verifies summary, defaultValue, validValues, and docHref wiki link (KAN-477)', async () => {
+      render(
+        <IssueNavigatorBar
+          projectKey="KAN"
+          issues={mockIssues}
+          queryMode="basic"
+        />,
+      );
+
+      const searchHelp = screen.getByTestId('search-mode-help');
+      fireEvent.click(searchHelp);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('Toggle between simple text search and structured query syntax.'),
+        ).toBeDefined();
+      });
+
+      // Default value assertion
+      expect(screen.getByTestId('search-mode-help-default')).toBeDefined();
+      expect(within(screen.getByTestId('search-mode-help-default')).getByText('Basic')).toBeDefined();
+
+      // Valid values list
+      expect(
+        screen.getByText('Simple keyword search across summary, key, and details.'),
+      ).toBeDefined();
+      expect(
+        screen.getByText('Structured syntax with attribute predicates and operators.'),
+      ).toBeDefined();
+
+      // Deep documentation link in popover
+      const popoverLink = screen.getByTestId('search-mode-help-doc-link');
+      expect(popoverLink.getAttribute('href')).toBe(
+        '/docs/ticket-screen-and-work-item-features#search-and-filtering',
+      );
+
+      // Escape key dismisses popover
+      fireEvent.keyDown(searchHelp, { key: 'Escape' });
+      await waitFor(() => {
+        expect(
+          screen.queryByText('Toggle between simple text search and structured query syntax.'),
+        ).toBeNull();
+      });
+    });
+
+    it('opens HelpDrawer when StudioDocLink is clicked inside ShellPanelsProvider (KAN-477)', () => {
+      const unregister = registerShellPanel('help', () => <div data-testid="mock-help-drawer" />);
+
+      function PanelWatcher() {
+        const { activePanel } = useShellPanels();
+        return (
+          <div>
+            <div data-testid="active-panel-id">{activePanel?.id ?? 'none'}</div>
+            <div data-testid="active-panel-arg">{JSON.stringify(activePanel?.arg ?? {})}</div>
+          </div>
+        );
+      }
+
+      try {
+        render(
+          <ShellPanelsProvider>
+            <IssueNavigatorBar
+              projectKey="KAN"
+              issues={mockIssues}
+            />
+            <PanelWatcher />
+          </ShellPanelsProvider>,
+        );
+
+        const docLink = screen.getByTestId('issue-navigator-doc-link');
+        const idElem = screen.getByTestId('active-panel-id');
+        expect(idElem.textContent).toBe('none');
+
+        act(() => {
+          fireEvent.click(docLink);
+        });
+
+        expect(idElem.textContent).toBe('help');
+        const argElem = screen.getByTestId('active-panel-arg');
+        expect(JSON.parse(argElem.textContent || '{}')).toEqual({
+          href: '/docs/ticket-screen-and-work-item-features#search-and-filtering',
+          title: 'Search Guide ->',
+        });
+      } finally {
+        unregister();
+      }
+    });
+
+    it('enforces static AST invariants: zero inline styles and zero nested FieldHelpHint in label (KAN-477)', () => {
+      const tsxPath = path.resolve(__dirname, 'IssueNavigatorBar.tsx');
+      const source = fs.readFileSync(tsxPath, 'utf8');
+
+      // Zero inline style={{...}} props
+      expect(source).not.toMatch(/style\s*=\s*\{\{/);
+
+      // Zero FieldHelpHint or StudioDocLink nested inside <label>...</label>
+      expect(source).not.toMatch(/<label[^>]*>(?:(?!<\/label>)[\s\S])*?<FieldHelpHint/i);
+      expect(source).not.toMatch(/<label[^>]*>(?:(?!<\/label>)[\s\S])*?<StudioDocLink/i);
+
+      // Zero FieldHelpHint or StudioDocLink nested inside <button>...</button>
+      expect(source).not.toMatch(/<button\b(?![^>]*\/>)[^>]*>(?:(?!<\/button>)[\s\S])*?<FieldHelpHint/i);
+      expect(source).not.toMatch(/<button\b(?![^>]*\/>)[^>]*>(?:(?!<\/button>)[\s\S])*?<StudioDocLink/i);
     });
   });
 });

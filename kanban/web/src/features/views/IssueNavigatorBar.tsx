@@ -27,6 +27,8 @@ import { CsvImportExportModal } from './CsvImportExportModal';
 import type { IssueItem, SavedView, StateSummary } from './viewsApi';
 import type { ActiveFilters } from './FilterDisplayBar';
 import { ReportExportModal } from '../reports/ReportExportModal';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './IssueNavigatorBar.css';
 
 export type NavigatorHeaderMode = '1col' | 'basic-2col' | 'advanced-1line';
@@ -487,34 +489,48 @@ export function IssueNavigatorBar({
         </form>
 
         {/* Basic / Query Mode Toggle */}
-        <div
-          className="navigator-mode-group"
-          data-testid="navigator-mode-toggle"
-          role="group"
-          aria-label="Search mode"
-        >
-          <button
-            type="button"
-            className={`navigator-mode-btn ${queryMode === 'basic' ? 'navigator-mode-btn--active' : ''}`}
-            data-testid="mode-basic-btn"
-            aria-pressed={queryMode === 'basic'}
-            onClick={() => {
-              onQueryModeChange?.('basic');
-            }}
+        <div className="navigator-mode-wrap">
+          <div
+            className="navigator-mode-group"
+            data-testid="navigator-mode-toggle"
+            role="group"
+            aria-label="Search mode"
           >
-            Basic
-          </button>
-          <button
-            type="button"
-            className={`navigator-mode-btn ${queryMode === 'query' ? 'navigator-mode-btn--active' : ''}`}
-            data-testid="mode-query-btn"
-            aria-pressed={queryMode === 'query'}
-            onClick={() => {
-              onQueryModeChange?.('query');
-            }}
-          >
-            Query
-          </button>
+            <button
+              type="button"
+              className={`navigator-mode-btn ${queryMode === 'basic' ? 'navigator-mode-btn--active' : ''}`}
+              data-testid="mode-basic-btn"
+              aria-pressed={queryMode === 'basic'}
+              onClick={() => {
+                onQueryModeChange?.('basic');
+              }}
+            >
+              Basic
+            </button>
+            <button
+              type="button"
+              className={`navigator-mode-btn ${queryMode === 'query' ? 'navigator-mode-btn--active' : ''}`}
+              data-testid="mode-query-btn"
+              aria-pressed={queryMode === 'query'}
+              onClick={() => {
+                onQueryModeChange?.('query');
+              }}
+            >
+              Query
+            </button>
+          </div>
+          <FieldHelpHint
+            title="Search Mode"
+            summary="Toggle between simple text search and structured query syntax."
+            validValues={[
+              { label: 'Basic', description: 'Simple keyword search across summary, key, and details.' },
+              { label: 'Query', description: 'Structured syntax with attribute predicates and operators.' },
+            ]}
+            defaultValue="Basic"
+            docHref="/docs/ticket-screen-and-work-item-features#search-and-filtering"
+            testId="search-mode-help"
+            ariaLabel="Help for Search Mode"
+          />
         </div>
 
         {/* Compact Search Header Mode Selector (KAN-377) */}
@@ -660,8 +676,8 @@ export function IssueNavigatorBar({
           {/* Backwards-compatible alias for deprecated Row-2 reports export button */}
           <button
             type="button"
+            className="navigator-hidden-btn"
             data-testid="navigator-reports-export-btn"
-            style={{ display: 'none' }}
             aria-hidden="true"
             tabIndex={-1}
             onClick={() => {
@@ -671,8 +687,15 @@ export function IssueNavigatorBar({
                 setIsReportsModalOpen(true);
               }
             }}
-          />
+          ></button>
         </div>
+
+        {/* Search Guide Studio Doc Link (KAN-477) */}
+        <StudioDocLink
+          href="/docs/ticket-screen-and-work-item-features#search-and-filtering"
+          label="Search Guide ->"
+          testId="issue-navigator-doc-link"
+        />
 
         {/* Mobile / Compact Landscape Filters Toggle */}
         {queryMode === 'basic' && (
