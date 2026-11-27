@@ -226,7 +226,7 @@ index ab7cd088..eb150b83 100644
  
            <p className="copy-notice" data-testid="copy-creator-notice">
 diff --git a/kanban/web/src/features/drawer-actions/drawerActions.css b/kanban/web/src/features/drawer-actions/drawerActions.css
-index 375aa730..1ce04198 100644
+index 375aa730..400ca718 100644
 --- a/kanban/web/src/features/drawer-actions/drawerActions.css
 +++ b/kanban/web/src/features/drawer-actions/drawerActions.css
 @@ -370,6 +370,35 @@
@@ -265,6 +265,15 @@ index 375aa730..1ce04198 100644
  .blast-radius-modal {
    max-width: 520px;
  }
+@@ -503,7 +532,7 @@
+   padding: 0 var(--space-3, 12px);
+   font-size: var(--text-sm, 13px);
+   font-weight: 500;
+-  color: #0f172a;
++  color: var(--accent-primary-fg);
+   background: var(--accent-primary);
+   border: 1px solid transparent;
+   border-radius: var(--radius-sm, 6px);
 @@ -563,6 +592,15 @@
      padding: 24px;
    }
