@@ -1,0 +1,110 @@
+diff --git a/kanban/web/src/app/AppShell.css b/kanban/web/src/app/AppShell.css
+index afd3cc35..512bbbe1 100644
+--- a/kanban/web/src/app/AppShell.css
++++ b/kanban/web/src/app/AppShell.css
+@@ -330,6 +330,20 @@
+   margin-top: var(--space-3, 12px);
+ }
+ 
++.kb-drafts-header-title-row {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++}
++
++.kb-drafts-empty-guidance {
++  font-size: var(--text-sm, 0.8125rem);
++  color: var(--text-secondary, #4b5563);
++  max-width: 540px;
++  line-height: 1.5;
++  margin: var(--space-2, 8px) 0 var(--space-3, 12px) 0;
++}
++
+ .kb-form-row {
+   display: flex;
+   gap: 12px;
+diff --git a/kanban/web/src/app/routes.test.tsx b/kanban/web/src/app/routes.test.tsx
+index 49a658c2..4256f596 100644
+--- a/kanban/web/src/app/routes.test.tsx
++++ b/kanban/web/src/app/routes.test.tsx
+@@ -1172,6 +1172,9 @@ describe('IssuesWorkspaceRoute', () => {
+ 
+     await waitFor(() => {
+       expect(screen.getByTestId('drafts-empty')).toBeDefined();
++      expect(screen.getByTestId('drafts-empty-guidance')).toBeDefined();
++      expect(screen.getByRole('button', { name: /Local Browser Drafts/i })).toBeDefined();
++      expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
+     });
+ 
+     uDrafts();
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 69b16172..698a9da7 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -634,13 +634,24 @@ export function DraftsWorkspaceView(): JSX.Element {
+   return (
+     <section data-testid="drafts-view" className="kb-workspace-section">
+       <div className="kb-workspace-section-header">
+-        <h1>Drafts</h1>
++        <div className="kb-drafts-header-title-row">
++          <h1>Drafts</h1>
++          <FieldHelpHint
++            title="Local Browser Drafts"
++            summary="Work item drafts are stored locally in your browser so you can safely recover in-progress items across sessions or offline before publishing."
++            defaultValue="Saved locally"
++            docHref="/docs/scripted-workflows-and-transition-helpers"
++          />
++        </div>
+         <p>Work item drafts saved before publishing to a project.</p>
+       </div>
+ 
+       {drafts.length === 0 ? (
+         <div data-testid="drafts-empty" className="drafts-empty-notice">
+           <p>No work item drafts found.</p>
++          <p className="kb-drafts-empty-guidance" data-testid="drafts-empty-guidance">
++            Drafts automatically save your in-progress work items in this browser so you can safely recover them across sessions or offline without publishing unfinished items.
++          </p>
+           <Link to={emptyStateCtaLink}>Create a new work item →</Link>
+         </div>
+       ) : (
+diff --git a/kanban/web/src/app/routes.test.tsx b/kanban/web/src/app/routes.test.tsx
+index 4256f596..9f3ec54a 100644
+--- a/kanban/web/src/app/routes.test.tsx
++++ b/kanban/web/src/app/routes.test.tsx
+@@ -1177,6 +1177,22 @@ describe('IssuesWorkspaceRoute', () => {
+       expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
+     });
+ 
++    const draftsHintBtn = screen.getByRole('button', { name: /Local Browser Drafts/i });
++    act(() => {
++      draftsHintBtn.focus();
++    });
++    const popover = screen.getByRole('dialog', { name: 'Local Browser Drafts' });
++    expect(popover).toBeDefined();
++    expect(popover.textContent).toContain('Saved locally');
++    const moreInfoLink = popover.querySelector('a[href="/docs/ticket-screen-and-work-item-features"]');
++    expect(moreInfoLink).not.toBeNull();
++    expect(moreInfoLink?.textContent).toContain('More info');
++
++    act(() => {
++      fireEvent.keyDown(draftsHintBtn, { key: 'Escape' });
++    });
++    expect(screen.queryByRole('dialog', { name: 'Local Browser Drafts' })).toBeNull();
++
+     uDrafts();
+   });
+ 
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 698a9da7..b7344540 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -640,7 +640,8 @@ export function DraftsWorkspaceView(): JSX.Element {
+             title="Local Browser Drafts"
+             summary="Work item drafts are stored locally in your browser so you can safely recover in-progress items across sessions or offline before publishing."
+             defaultValue="Saved locally"
+-            docHref="/docs/scripted-workflows-and-transition-helpers"
++            docHref="/docs/ticket-screen-and-work-item-features"
++            testId="drafts-help-hint"
+           />
+         </div>
+         <p>Work item drafts saved before publishing to a project.</p>

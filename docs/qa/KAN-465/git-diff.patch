@@ -1,0 +1,28 @@
+diff --git a/kanban/web/src/app/routes.test.tsx b/kanban/web/src/app/routes.test.tsx
+index eae80f74..49a658c2 100644
+--- a/kanban/web/src/app/routes.test.tsx
++++ b/kanban/web/src/app/routes.test.tsx
+@@ -898,7 +898,9 @@ describe('IssuesWorkspaceRoute', () => {
+     // Fill form
+     const nameInput = screen.getByTestId('new-module-name-input');
+     fireEvent.change(nameInput, { target: { value: 'Core Auth' } });
+-    const statusSelect = screen.getByTestId('new-module-status-select');
++    const statusSelect = screen.getByTestId<HTMLSelectElement>('new-module-status-select');
++    expect(statusSelect.value).toBe('planned');
++    expect(screen.getByRole('option', { name: 'Planned (Default)' })).toBeDefined();
+     fireEvent.change(statusSelect, { target: { value: 'in_progress' } });
+     const startInput = screen.getByTestId('new-module-start-input');
+     fireEvent.change(startInput, { target: { value: '2026-03-01' } });
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index f19a0aaa..69b16172 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -1498,7 +1498,7 @@ function ProjectModulesViewInner({
+                 value={status}
+                 onChange={(e) => { setStatus(e.target.value); }}
+               >
+-                <option value="planned">Planned</option>
++                <option value="planned">Planned (Default)</option>
+                 <option value="backlog">Backlog</option>
+                 <option value="in_progress">In Progress</option>
+                 <option value="paused">Paused</option>

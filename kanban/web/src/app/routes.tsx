@@ -78,6 +78,8 @@ import { CreateProjectModal, type CreatedProject } from '../features/projects/Cr
 import { ProjectSavedViewsView } from '../features/views/ProjectSavedViewsView';
 import { useSessionGuard } from '../features/auth/useSessionGuard';
 import { useDrafts, deleteDraft, type IssueDraft } from '../features/drafts/draftsStore';
+import { FieldHelpHint } from '../components/help/FieldHelpHint';
+import { StudioDocLink } from '../components/help/StudioDocLink';
 import { fetchProjectStates } from '../features/views/viewsApi';
 import { fetchProjectModules } from '../features/drawer-rail/railApi';
 import { FlowAnalyticsPage } from '../features/analytics/FlowAnalyticsPage';
@@ -632,13 +634,25 @@ export function DraftsWorkspaceView(): JSX.Element {
   return (
     <section data-testid="drafts-view" className="kb-workspace-section">
       <div className="kb-workspace-section-header">
-        <h1>Drafts</h1>
+        <div className="kb-drafts-header-title-row">
+          <h1>Drafts</h1>
+          <FieldHelpHint
+            title="Local Browser Drafts"
+            summary="Work item drafts are stored locally in your browser so you can safely recover in-progress items across sessions or offline before publishing."
+            defaultValue="Saved locally"
+            docHref="/docs/ticket-screen-and-work-item-features"
+            testId="drafts-help-hint"
+          />
+        </div>
         <p>Work item drafts saved before publishing to a project.</p>
       </div>
 
       {drafts.length === 0 ? (
         <div data-testid="drafts-empty" className="drafts-empty-notice">
           <p>No work item drafts found.</p>
+          <p className="kb-drafts-empty-guidance" data-testid="drafts-empty-guidance">
+            Drafts automatically save your in-progress work items in this browser so you can safely recover them across sessions or offline without publishing unfinished items.
+          </p>
           <Link to={emptyStateCtaLink}>Create a new work item →</Link>
         </div>
       ) : (
@@ -952,6 +966,11 @@ function ProjectCyclesViewInner({
           >
             📊 View Flow Analytics Studio &rarr;
           </Link>
+          <StudioDocLink
+            href="/docs/scripted-workflows-and-transition-helpers"
+            label="Cycles & Workflows Guide ->"
+            testId="cycles-doc-link"
+          />
         </div>
       </div>
 
@@ -964,9 +983,10 @@ function ProjectCyclesViewInner({
             </div>
           )}
           <div className="kb-form-row">
-            <label className="kb-form-field">
-              <span className="kb-form-label">Cycle Name</span>
+            <div className="kb-form-field">
+              <label htmlFor="new-cycle-name-input" className="kb-form-label">Cycle Name</label>
               <input
+                id="new-cycle-name-input"
                 type="text"
                 className="kb-form-input"
                 data-testid="new-cycle-name-input"
@@ -975,10 +995,21 @@ function ProjectCyclesViewInner({
                 onChange={(e) => { setNewName(e.target.value); }}
                 required
               />
-            </label>
-            <label className="kb-form-field">
-              <span className="kb-form-label">Start Date</span>
+            </div>
+            <div className="kb-form-field">
+              <div className="kb-form-label-row">
+                <label htmlFor="new-cycle-start-input" className="kb-form-label">Start Date</label>
+                <FieldHelpHint
+                  title="Cycle Dates"
+                  summary="Optional start date for the sprint cycle. Format: YYYY-MM-DD."
+                  defaultValue="Optional"
+                  example="YYYY-MM-DD"
+                  docHref="/docs/scripted-workflows-and-transition-helpers"
+                  testId="cycle-start-date-help-hint"
+                />
+              </div>
               <input
+                id="new-cycle-start-input"
                 type="date"
                 className="kb-form-input"
                 data-testid="new-cycle-start-input"
@@ -986,10 +1017,21 @@ function ProjectCyclesViewInner({
                 onChange={(e) => { setStartDate(e.target.value); }}
                 title="Start date"
               />
-            </label>
-            <label className="kb-form-field">
-              <span className="kb-form-label">End Date</span>
+            </div>
+            <div className="kb-form-field">
+              <div className="kb-form-label-row">
+                <label htmlFor="new-cycle-end-input" className="kb-form-label">End Date</label>
+                <FieldHelpHint
+                  title="Cycle Dates"
+                  summary="Optional end date for the sprint cycle. Format: YYYY-MM-DD."
+                  defaultValue="Optional"
+                  example="YYYY-MM-DD"
+                  docHref="/docs/scripted-workflows-and-transition-helpers"
+                  testId="cycle-end-date-help-hint"
+                />
+              </div>
               <input
+                id="new-cycle-end-input"
                 type="date"
                 className="kb-form-input"
                 data-testid="new-cycle-end-input"
@@ -997,7 +1039,7 @@ function ProjectCyclesViewInner({
                 onChange={(e) => { setEndDate(e.target.value); }}
                 title="End date"
               />
-            </label>
+            </div>
             <button
               type="submit"
               className="kb-btn-primary"
@@ -1446,9 +1488,10 @@ function ProjectModulesViewInner({
             </div>
           )}
           <div className="kb-form-row">
-            <label className="kb-form-field">
-              <span className="kb-form-label">Module Name</span>
+            <div className="kb-form-field">
+              <label htmlFor="new-module-name-input" className="kb-form-label">Module Name</label>
               <input
+                id="new-module-name-input"
                 type="text"
                 className="kb-form-input"
                 data-testid="new-module-name-input"
@@ -1457,56 +1500,65 @@ function ProjectModulesViewInner({
                 onChange={(e) => { setNewName(e.target.value); }}
                 required
               />
-            </label>
-            <label className="kb-form-field">
-              <span className="kb-form-label">Status</span>
+            </div>
+            <div className="kb-form-field">
+              <label htmlFor="new-module-status-select" className="kb-form-label">Status</label>
               <select
+                id="new-module-status-select"
                 className="kb-form-input"
                 data-testid="new-module-status-select"
                 value={status}
                 onChange={(e) => { setStatus(e.target.value); }}
               >
-                <option value="planned">Planned</option>
+                <option value="planned">Planned (Default)</option>
                 <option value="backlog">Backlog</option>
                 <option value="in_progress">In Progress</option>
                 <option value="paused">Paused</option>
                 <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
               </select>
-            </label>
-            <label className="kb-form-field">
-              <span className="kb-form-label">Start Date</span>
-              <input
-                type="date"
-                className="kb-form-input"
-                data-testid="new-module-start-input"
-                value={startDate}
-                onChange={(e) => { setStartDate(e.target.value); }}
-                title="Start date"
-              />
-            </label>
-            <label className="kb-form-field">
-              <span className="kb-form-label">Target Date</span>
-              <input
-                type="date"
-                className="kb-form-input"
-                data-testid="new-module-target-input"
-                value={targetDate}
-                onChange={(e) => { setTargetDate(e.target.value); }}
-                title="Target date"
-              />
-            </label>
-            <label className="kb-form-field">
-              <span className="kb-form-label">Description</span>
-              <input
-                type="text"
-                className="kb-form-input"
-                data-testid="new-module-desc-input"
-                placeholder="Description (optional)..."
-                value={description}
-                onChange={(e) => { setDescription(e.target.value); }}
-              />
-            </label>
+            </div>
+            <details className="kb-modules-advanced-fields">
+              <summary>Optional Dates & Description</summary>
+              <div className="kb-form-row kb-modules-advanced-row">
+                <div className="kb-form-field">
+                  <label htmlFor="new-module-start-input" className="kb-form-label">Start Date</label>
+                  <input
+                    id="new-module-start-input"
+                    type="date"
+                    className="kb-form-input"
+                    data-testid="new-module-start-input"
+                    value={startDate}
+                    onChange={(e) => { setStartDate(e.target.value); }}
+                    title="Start date"
+                  />
+                </div>
+                <div className="kb-form-field">
+                  <label htmlFor="new-module-target-input" className="kb-form-label">Target Date</label>
+                  <input
+                    id="new-module-target-input"
+                    type="date"
+                    className="kb-form-input"
+                    data-testid="new-module-target-input"
+                    value={targetDate}
+                    onChange={(e) => { setTargetDate(e.target.value); }}
+                    title="Target date"
+                  />
+                </div>
+                <div className="kb-form-field">
+                  <label htmlFor="new-module-desc-input" className="kb-form-label">Description</label>
+                  <input
+                    id="new-module-desc-input"
+                    type="text"
+                    className="kb-form-input"
+                    data-testid="new-module-desc-input"
+                    placeholder="Description (optional)..."
+                    value={description}
+                    onChange={(e) => { setDescription(e.target.value); }}
+                  />
+                </div>
+              </div>
+            </details>
             <button
               type="submit"
               className="kb-btn-primary"

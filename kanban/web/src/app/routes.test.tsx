@@ -588,6 +588,32 @@ describe('IssuesWorkspaceRoute', () => {
     await waitFor(() => {
       expect(screen.getByTestId('cycle-error-banner').textContent).toContain('Cycle creation rejected');
     });
+
+    // KAN-462: FieldHelpHints on cycle start/end date inputs
+    const startHint = screen.getByTestId('cycle-start-date-help-hint');
+    const endHint = screen.getByTestId('cycle-end-date-help-hint');
+    expect(startHint).toBeDefined();
+    expect(endHint).toBeDefined();
+    // HTML 4.10.4: NEVER nest FieldHelpHint inside label!
+    expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
+    // Sibling relationship inside .kb-form-label-row
+    expect(startHint.closest('.kb-form-label-row')).not.toBeNull();
+    expect(endHint.closest('.kb-form-label-row')).not.toBeNull();
+
+    act(() => {
+      startHint.focus();
+    });
+    const popover = screen.getByTestId('cycle-start-date-help-hint-popover');
+    expect(popover).toBeDefined();
+    expect(popover.textContent).toContain('Cycle Dates');
+    expect(popover.textContent).toContain('Optional');
+    expect(popover.textContent).toContain('YYYY-MM-DD');
+
+    // KAN-463: StudioDocLink in ProjectCyclesView header
+    const docLink = screen.getByTestId('cycles-doc-link');
+    expect(docLink).toBeDefined();
+    expect(docLink.getAttribute('href')).toBe('/docs/scripted-workflows-and-transition-helpers');
+    expect(docLink.textContent).toContain('Cycles & Workflows Guide ->');
   });
 
   it('ProjectModulesView displays error banner on failure and renders module description', async () => {
@@ -642,6 +668,26 @@ describe('IssuesWorkspaceRoute', () => {
     await waitFor(() => {
       expect(screen.getByTestId('module-error-banner').textContent).toContain('Module creation rejected');
     });
+
+    // KAN-464: Collapsible advanced fields in Create Module form
+    const advancedDetails = document.querySelector<HTMLDetailsElement>('details.kb-modules-advanced-fields');
+    expect(advancedDetails).not.toBeNull();
+    expect(advancedDetails?.open).toBe(false);
+    const summary = advancedDetails?.querySelector('summary');
+    expect(summary?.textContent).toContain('Optional Dates & Description');
+
+    // Toggle details to open
+    act(() => {
+      summary?.click();
+    });
+    expect(advancedDetails?.open).toBe(true);
+
+    // Verify getByLabelText for all 5 Create Module controls
+    expect(screen.getByLabelText('Module Name')).toBe(screen.getByTestId('new-module-name-input'));
+    expect(screen.getByLabelText('Status')).toBe(screen.getByTestId('new-module-status-select'));
+    expect(screen.getByLabelText('Start Date')).toBe(screen.getByTestId('new-module-start-input'));
+    expect(screen.getByLabelText('Target Date')).toBe(screen.getByTestId('new-module-target-input'));
+    expect(screen.getByLabelText('Description')).toBe(screen.getByTestId('new-module-desc-input'));
   });
 
   it('renders ProjectViewsRedirect, ProjectSavedViewsView, and fallback views without query client', () => {
@@ -866,7 +912,9 @@ describe('IssuesWorkspaceRoute', () => {
     // Fill form
     const nameInput = screen.getByTestId('new-module-name-input');
     fireEvent.change(nameInput, { target: { value: 'Core Auth' } });
-    const statusSelect = screen.getByTestId('new-module-status-select');
+    const statusSelect = screen.getByTestId<HTMLSelectElement>('new-module-status-select');
+    expect(statusSelect.value).toBe('planned');
+    expect(screen.getByRole('option', { name: 'Planned (Default)' })).toBeDefined();
     fireEvent.change(statusSelect, { target: { value: 'in_progress' } });
     const startInput = screen.getByTestId('new-module-start-input');
     fireEvent.change(startInput, { target: { value: '2026-03-01' } });
@@ -1138,7 +1186,26 @@ describe('IssuesWorkspaceRoute', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('drafts-empty')).toBeDefined();
+      expect(screen.getByTestId('drafts-empty-guidance')).toBeDefined();
+      expect(screen.getByRole('button', { name: /Local Browser Drafts/i })).toBeDefined();
+      expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
     });
+
+    const draftsHintBtn = screen.getByRole('button', { name: /Local Browser Drafts/i });
+    act(() => {
+      draftsHintBtn.focus();
+    });
+    const popover = screen.getByRole('dialog', { name: 'Local Browser Drafts' });
+    expect(popover).toBeDefined();
+    expect(popover.textContent).toContain('Saved locally');
+    const moreInfoLink = popover.querySelector('a[href="/docs/ticket-screen-and-work-item-features"]');
+    expect(moreInfoLink).not.toBeNull();
+    expect(moreInfoLink?.textContent).toContain('More info');
+
+    act(() => {
+      fireEvent.keyDown(draftsHintBtn, { key: 'Escape' });
+    });
+    expect(screen.queryByRole('dialog', { name: 'Local Browser Drafts' })).toBeNull();
 
     uDrafts();
   });

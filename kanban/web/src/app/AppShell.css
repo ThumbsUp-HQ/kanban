@@ -133,6 +133,33 @@
   }
 }
 
+@media (max-width: 767px), (pointer: coarse) {
+  .kb-modules-advanced-fields summary {
+    display: flex;
+    align-items: center;
+    min-height: var(--tap-min, 44px);
+  }
+
+  .kb-modules-advanced-fields summary::before {
+    content: '▸';
+    margin-right: var(--space-2, 8px);
+    font-size: var(--text-sm, 13px);
+  }
+
+  .kb-modules-advanced-fields[open] summary::before {
+    content: '▾';
+  }
+
+  .kb-modules-create-form .kb-btn-primary {
+    min-height: var(--tap-min, 44px);
+    height: auto;
+  }
+
+  .kb-modules-create-form .kb-form-input {
+    min-height: var(--tap-min, 44px);
+  }
+}
+
 /* Workspace Home & Section Views */
 .kb-workspace-home {
   display: flex;
@@ -266,6 +293,14 @@
   margin-bottom: var(--space-4, 16px);
 }
 
+.kb-workspace-section-header .kb-chart-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  flex-wrap: wrap;
+  margin-top: var(--space-3, 12px);
+}
+
 .kb-cycles-create-form,
 .kb-modules-create-form {
   background: var(--bg-surface);
@@ -293,6 +328,49 @@
   margin-bottom: 12px;
 }
 
+.kb-modules-advanced-fields {
+  width: 100%;
+  margin: var(--space-2, 8px) 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: var(--bg-surface);
+}
+
+.kb-modules-advanced-fields summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  user-select: none;
+}
+
+.kb-modules-advanced-fields summary:hover {
+  color: var(--fg-primary);
+}
+
+.kb-modules-advanced-fields[open] {
+  padding-bottom: var(--space-3, 12px);
+}
+
+.kb-modules-advanced-row {
+  margin-top: var(--space-3, 12px);
+}
+
+.kb-drafts-header-title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.kb-drafts-empty-guidance {
+  font-size: var(--text-sm, 0.8125rem);
+  color: var(--text-secondary, #4b5563);
+  max-width: 540px;
+  line-height: 1.5;
+  margin: var(--space-2, 8px) 0 var(--space-3, 12px) 0;
+}
+
 .kb-form-row {
   display: flex;
   gap: 12px;
@@ -304,6 +382,12 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.kb-form-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 6px);
 }
 
 .kb-form-label {
@@ -656,6 +740,7 @@
     align-items: stretch;
   }
   .kb-form-field {
+    flex: 0 0 auto;
     width: 100%;
   }
   .kb-form-input {

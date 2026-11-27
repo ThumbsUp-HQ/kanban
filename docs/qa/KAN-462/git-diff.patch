@@ -1,0 +1,132 @@
+diff --git a/kanban/web/src/app/AppShell.css b/kanban/web/src/app/AppShell.css
+index 3bbcc962..9d2d6b0a 100644
+--- a/kanban/web/src/app/AppShell.css
++++ b/kanban/web/src/app/AppShell.css
+@@ -306,6 +306,12 @@
+   gap: 4px;
+ }
+ 
++.kb-form-label-row {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2, 6px);
++}
++
+ .kb-form-label {
+   font-size: 12px;
+   font-weight: 500;
+diff --git a/kanban/web/src/app/routes.test.tsx b/kanban/web/src/app/routes.test.tsx
+index 9c49f60b..75a3e6de 100644
+--- a/kanban/web/src/app/routes.test.tsx
++++ b/kanban/web/src/app/routes.test.tsx
+@@ -588,6 +588,26 @@ describe('IssuesWorkspaceRoute', () => {
+     await waitFor(() => {
+       expect(screen.getByTestId('cycle-error-banner').textContent).toContain('Cycle creation rejected');
+     });
++
++    // KAN-462: FieldHelpHints on cycle start/end date inputs
++    const startHint = screen.getByTestId('cycle-start-date-help-hint');
++    const endHint = screen.getByTestId('cycle-end-date-help-hint');
++    expect(startHint).toBeDefined();
++    expect(endHint).toBeDefined();
++    // HTML 4.10.4: NEVER nest FieldHelpHint inside label!
++    expect(document.querySelectorAll('label button.field-help-hint').length).toBe(0);
++    // Sibling relationship inside .kb-form-label-row
++    expect(startHint.closest('.kb-form-label-row')).not.toBeNull();
++    expect(endHint.closest('.kb-form-label-row')).not.toBeNull();
++
++    act(() => {
++      startHint.focus();
++    });
++    const popover = screen.getByTestId('cycle-start-date-help-hint-popover');
++    expect(popover).toBeDefined();
++    expect(popover.textContent).toContain('Cycle Dates');
++    expect(popover.textContent).toContain('Optional');
++    expect(popover.textContent).toContain('YYYY-MM-DD');
+   });
+ 
+   it('ProjectModulesView displays error banner on failure and renders module description', async () => {
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 409c63a8..f1571580 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -78,6 +78,7 @@ import { CreateProjectModal, type CreatedProject } from '../features/projects/Cr
+ import { ProjectSavedViewsView } from '../features/views/ProjectSavedViewsView';
+ import { useSessionGuard } from '../features/auth/useSessionGuard';
+ import { useDrafts, deleteDraft, type IssueDraft } from '../features/drafts/draftsStore';
++import { FieldHelpHint } from '../components/help/FieldHelpHint';
+ import { fetchProjectStates } from '../features/views/viewsApi';
+ import { fetchProjectModules } from '../features/drawer-rail/railApi';
+ import { FlowAnalyticsPage } from '../features/analytics/FlowAnalyticsPage';
+@@ -964,9 +965,10 @@ function ProjectCyclesViewInner({
+             </div>
+           )}
+           <div className="kb-form-row">
+-            <label className="kb-form-field">
+-              <span className="kb-form-label">Cycle Name</span>
++            <div className="kb-form-field">
++              <label htmlFor="new-cycle-name-input" className="kb-form-label">Cycle Name</label>
+               <input
++                id="new-cycle-name-input"
+                 type="text"
+                 className="kb-form-input"
+                 data-testid="new-cycle-name-input"
+@@ -975,10 +977,21 @@ function ProjectCyclesViewInner({
+                 onChange={(e) => { setNewName(e.target.value); }}
+                 required
+               />
+-            </label>
+-            <label className="kb-form-field">
+-              <span className="kb-form-label">Start Date</span>
++            </div>
++            <div className="kb-form-field">
++              <div className="kb-form-label-row">
++                <label htmlFor="new-cycle-start-input" className="kb-form-label">Start Date</label>
++                <FieldHelpHint
++                  title="Cycle Dates"
++                  summary="Optional start date for the sprint cycle. Format: YYYY-MM-DD."
++                  defaultValue="Optional"
++                  example="YYYY-MM-DD"
++                  docHref="/docs/scripted-workflows-and-transition-helpers"
++                  testId="cycle-start-date-help-hint"
++                />
++              </div>
+               <input
++                id="new-cycle-start-input"
+                 type="date"
+                 className="kb-form-input"
+                 data-testid="new-cycle-start-input"
+@@ -986,10 +999,21 @@ function ProjectCyclesViewInner({
+                 onChange={(e) => { setStartDate(e.target.value); }}
+                 title="Start date"
+               />
+-            </label>
+-            <label className="kb-form-field">
+-              <span className="kb-form-label">End Date</span>
++            </div>
++            <div className="kb-form-field">
++              <div className="kb-form-label-row">
++                <label htmlFor="new-cycle-end-input" className="kb-form-label">End Date</label>
++                <FieldHelpHint
++                  title="Cycle Dates"
++                  summary="Optional end date for the sprint cycle. Format: YYYY-MM-DD."
++                  defaultValue="Optional"
++                  example="YYYY-MM-DD"
++                  docHref="/docs/scripted-workflows-and-transition-helpers"
++                  testId="cycle-end-date-help-hint"
++                />
++              </div>
+               <input
++                id="new-cycle-end-input"
+                 type="date"
+                 className="kb-form-input"
+                 data-testid="new-cycle-end-input"
+@@ -997,7 +1021,7 @@ function ProjectCyclesViewInner({
+                 onChange={(e) => { setEndDate(e.target.value); }}
+                 title="End date"
+               />
+-            </label>
++            </div>
+             <button
+               type="submit"
+               className="kb-btn-primary"
