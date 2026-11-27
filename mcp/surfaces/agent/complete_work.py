@@ -299,6 +299,7 @@ async def _complete_single(  # noqa: C901
         "POST",
         f"/api/v1/issues/{identifier}/complete-work",
         json_data=payload,
+        params={"wait": "true"},
         subject_token=subject_token,
         mcp_session_id=session_id,
     )
@@ -309,6 +310,21 @@ async def _complete_single(  # noqa: C901
 
     key = str(resp_data.get("key", identifier))
     seq_num = extract_issue_sequence(resp_data, key)
+
+    # KAN-537/538 seam: server waited for the gate verdict (wait=true)
+    gate_result = resp_data.get("gate")
+    if isinstance(gate_result, dict) and gate_result.get("error_code") != "GATE_TIMEOUT":
+        return {
+            "key": key,
+            "issue_key": key,
+            "sequence_number": seq_num,
+            "execution_id": str(gate_result.get("execution_id", "")),
+            "passed": bool(gate_result.get("passed")),
+            "status": str(gate_result.get("status", "")),
+            "verdict": gate_result.get("verdict"),
+            "comment": str(gate_result.get("comment", "")),
+            "findings": list(gate_result.get("findings") or []),
+        }
 
     # Check for 202 Accepted pending_agent_gate hold
     if "execution_id" in resp_data and "active_agent" in resp_data:

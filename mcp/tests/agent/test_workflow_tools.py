@@ -171,7 +171,7 @@ async def test_begin_work_positive_execution(agent_test_env: AgentTestEnv) -> No
 
 
 async def test_transition_ticket_help_and_guards(agent_test_env: AgentTestEnv) -> None:
-    """transition_ticket provides help and blocks transitions to completed states."""
+    """transition_ticket provides help and routes completed states through the gate."""
     env = agent_test_env
 
     # Help
@@ -179,16 +179,15 @@ async def test_transition_ticket_help_and_guards(agent_test_env: AgentTestEnv) -
     assert h_res["isError"] is False
     assert "transition_ticket" in h_res["content"][0]["text"]
 
-    # Blocked: transition to Done requires complete_work
+    # KAN-537: transition to Done routes through the same server-side complete_work gate
     guard_res = await _call_tool(
         env,
         "transition_ticket",
         {"identifier": "KAN-142", "to_state": "Done"},
         subject_token=env.token_adam,
     )
-    assert guard_res["isError"] is True
-    err_text = guard_res["content"][0]["text"]
-    assert "USE_COMPLETE_WORK" in err_text or "complete_work" in err_text
+    assert guard_res["isError"] is False
+    assert "transitioned" in guard_res["content"][0]["text"]
 
 
 async def test_transition_ticket_positive_execution(agent_test_env: AgentTestEnv) -> None:

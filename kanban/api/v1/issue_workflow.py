@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi import APIRouter, Depends, Header, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import JSONResponse
@@ -24,6 +26,10 @@ from kanban.issues.workflow_service import begin_work, complete_work, transition
 from kanban.security.permissions import Capability, require_capability
 from kanban.security.ratelimit import ISSUE_WORKFLOW_RATE_LIMIT, rate_limited
 from kanban.services import issues as svc
+from kanban.workflows.async_gate import wait_for_gate_execution
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 router = APIRouter(tags=["issue-workflow"])
 
@@ -35,6 +41,64 @@ async def _principal_rate_key(request: Request) -> list[str]:
     """Extract authenticated principal ID for rate limiting."""
     caller = await get_principal(request)
     return [str(caller.principal_id)]
+
+
+_MAX_GATE_WAIT_MS = 120_000
+_DEFAULT_GATE_WAIT_MS = 60_000
+
+
+@dataclass(frozen=True)
+class GateWait:
+    """Caller request to block until a dispatched agent gate yields a verdict."""
+
+    wait: bool
+    timeout_ms: int
+
+
+def _gate_wait(
+    wait: Annotated[bool, Query()] = False,  # noqa: FBT002
+    wait_timeout_ms: Annotated[int, Query(ge=0, le=_MAX_GATE_WAIT_MS)] = _DEFAULT_GATE_WAIT_MS,
+) -> GateWait:
+    """Parse ``?wait=true&wait_timeout_ms=N`` (bounded to 120s) for gate-held transitions."""
+    return GateWait(wait=wait, timeout_ms=wait_timeout_ms)
+
+
+async def _gate_hold_response(
+    session: AsyncSession,
+    hold_content: dict[str, Any],
+    *,
+    wait: bool,
+    wait_timeout_ms: int,
+) -> JSONResponse:
+    """Return the 202 hold, or the synchronous gate verdict when ``wait`` is set.
+
+    Must be called AFTER the dispatch transaction committed. Each poll runs in a
+    short transaction on the same RLS-bound session that is ended before sleeping,
+    so no DB transaction is held open during the wait (KAN-537/KAN-538 seam).
+    """
+    if not wait:
+        return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=hold_content)
+
+    @asynccontextmanager
+    async def _poll_session() -> AsyncIterator[AsyncSession]:
+        try:
+            yield session
+        finally:
+            if session.in_transaction():
+                await session.commit()
+
+    gate = await wait_for_gate_execution(
+        _poll_session,
+        hold_content["execution_id"],
+        timeout_ms=min(max(wait_timeout_ms, 0), _MAX_GATE_WAIT_MS),
+    )
+    if gate.get("error_code") == "GATE_TIMEOUT":
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED, content={**hold_content, "gate": gate}
+        )
+    return JSONResponse(
+        status_code=status.HTTP_200_OK, content={**hold_content, **gate, "gate": gate}
+    )
 
 
 class BeginWorkRequest(BaseModel):
@@ -162,11 +226,12 @@ async def api_begin_work(
     summary="Transition issue to intermediate workflow state",
     dependencies=[Depends(rate_limited(ISSUE_WORKFLOW_RATE_LIMIT, key_func=_principal_rate_key))],
 )
-async def api_transition_ticket(
+async def api_transition_ticket(  # noqa: PLR0913, PLR0917
     issue_key: str,
     body: TransitionTicketRequest,
     caller: Caller,
     session: Session,
+    gate_wait: Annotated[GateWait, Depends(_gate_wait)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
     """Transition an issue state under concurrency and gate hook evaluation."""
@@ -186,15 +251,15 @@ async def api_transition_ticket(
 
         if gate_hold is not None:
             await session.commit()
-            return JSONResponse(
-                status_code=status.HTTP_202_ACCEPTED,
-                content={
-                    "status": "pending_agent_gate",
-                    "execution_id": str(gate_hold.execution_id),
-                    "active_agent": gate_hold.active_agent,
-                    "from_state": gate_hold.from_state,
-                    "to_state": gate_hold.to_state,
-                },
+            hold_content = {
+                "status": "pending_agent_gate",
+                "execution_id": str(gate_hold.execution_id),
+                "active_agent": gate_hold.active_agent,
+                "from_state": gate_hold.from_state,
+                "to_state": gate_hold.to_state,
+            }
+            return await _gate_hold_response(
+                session, hold_content, wait=gate_wait.wait, wait_timeout_ms=gate_wait.timeout_ms
             )
 
         await session.flush()
@@ -229,11 +294,12 @@ async def api_transition_ticket(
     summary="Verify blockers and QA gate, transition to completed, and log proof",
     dependencies=[Depends(rate_limited(ISSUE_WORKFLOW_RATE_LIMIT, key_func=_principal_rate_key))],
 )
-async def api_complete_work(
+async def api_complete_work(  # noqa: PLR0913, PLR0917
     issue_key: str,
     body: CompleteWorkRequest,
     caller: Caller,
     session: Session,
+    gate_wait: Annotated[GateWait, Depends(_gate_wait)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
     """Verify preconditions, complete issue workflow, and record WORK_COMPLETED activity."""
@@ -253,15 +319,15 @@ async def api_complete_work(
 
         if gate_hold is not None:
             await session.commit()
-            return JSONResponse(
-                status_code=status.HTTP_202_ACCEPTED,
-                content={
-                    "status": "pending_agent_gate",
-                    "execution_id": str(gate_hold.execution_id),
-                    "active_agent": gate_hold.active_agent,
-                    "from_state": gate_hold.from_state,
-                    "to_state": gate_hold.to_state,
-                },
+            hold_content = {
+                "status": "pending_agent_gate",
+                "execution_id": str(gate_hold.execution_id),
+                "active_agent": gate_hold.active_agent,
+                "from_state": gate_hold.from_state,
+                "to_state": gate_hold.to_state,
+            }
+            return await _gate_hold_response(
+                session, hold_content, wait=gate_wait.wait, wait_timeout_ms=gate_wait.timeout_ms
             )
 
         await session.flush()
