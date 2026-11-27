@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
+import { createAllStatesFilterPreference } from './issueFilterCookie';
 import * as railApi from '../drawer-rail/railApi';
 import * as client from '../../api/client';
 
@@ -530,6 +533,355 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
     fireEvent.keyDown(window, { key: '/' });
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: /filter facets/i })).toBeDefined();
+    });
+  });
+
+  describe('FieldHelpHint & HTML 4.10.4 Shift-Left Invariants (KAN-479)', () => {
+    it('renders FieldHelpHint for Group and Sub-group as accessible adjacent sibling controls (KAN-479)', () => {
+      const { container } = render(
+        <FilterDisplayBar
+          groupBy="state"
+          subGroupBy="none"
+          modulesEnabled={true}
+        />
+      );
+
+      // 1. Verify existence of both FieldHelpHint triggers
+      const groupHelp = screen.getByTestId('group-by-help');
+      const subGroupHelp = screen.getByTestId('subgroup-by-help');
+      expect(groupHelp).toBeDefined();
+      expect(subGroupHelp).toBeDefined();
+
+      // 2. HTML 4.10.4 Invariants: NEVER nested inside <label> or another <button>
+      expect(groupHelp.closest('label')).toBeNull();
+      expect(subGroupHelp.closest('label')).toBeNull();
+      expect(groupHelp.closest('button.filter-btn-trigger')).toBeNull();
+      expect(subGroupHelp.closest('button.filter-btn-trigger')).toBeNull();
+
+      // Flex wrapper sibling checks
+      const groupLabelWrap = groupHelp.closest('.filter-axis-label-wrap');
+      const subLabelWrap = subGroupHelp.closest('.filter-axis-label-wrap');
+      expect(groupLabelWrap).not.toBeNull();
+      expect(subLabelWrap).not.toBeNull();
+
+      expect(groupLabelWrap?.querySelector('label[for="group-by-select"]')).not.toBeNull();
+      expect(subLabelWrap?.querySelector('label[for="subgroup-by-select"]')).not.toBeNull();
+
+      // Strict querySelectorAll assertion mandated by KAN-479
+      const invalidNestedButtons = container.querySelectorAll(
+        'label button.field-help-hint, button button.field-help-hint'
+      );
+      expect(invalidNestedButtons.length).toBe(0);
+      expect(document.querySelectorAll('label button.field-help-hint, button button.field-help-hint').length).toBe(0);
+
+      // 3. ARIA attributes
+      expect(groupHelp.getAttribute('aria-label')).toBe('Help for Group Axis');
+      expect(groupHelp.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(subGroupHelp.getAttribute('aria-label')).toBe('Help for Sub-group Axis');
+      expect(subGroupHelp.getAttribute('aria-haspopup')).toBe('dialog');
+    });
+
+    it('opens Group Axis FieldHelpHint popover and verifies summary, defaultValue, validValues, and docHref wiki link (KAN-479)', async () => {
+      render(
+        <FilterDisplayBar
+          groupBy="state"
+          subGroupBy="none"
+          modulesEnabled={true}
+        />
+      );
+
+      const groupHelp = screen.getByTestId('group-by-help');
+      fireEvent.click(groupHelp);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('Primary board grouping axis defining vertical column divisions.')
+        ).toBeDefined();
+      });
+
+      // Default value
+      expect(screen.getByTestId('group-by-help-default')).toBeDefined();
+      expect(within(screen.getByTestId('group-by-help-default')).getByText('State')).toBeDefined();
+
+      // Valid values list
+      expect(screen.getByText('Group issues into workflow columns by state.')).toBeDefined();
+      expect(screen.getByText('Group issues by priority severity tiers.')).toBeDefined();
+      expect(screen.getByText('Group issues by assigned team member.')).toBeDefined();
+      expect(screen.getByText('Group issues by sprint cadence cycle.')).toBeDefined();
+      expect(screen.getByText('Group issues by feature module boundary.')).toBeDefined();
+      expect(screen.getByText('Group issues by assigned tag label.')).toBeDefined();
+      expect(screen.getByText('Render all issues without column grouping.')).toBeDefined();
+
+      // Documentation link
+      const docLink = screen.getByTestId('group-by-help-doc-link');
+      expect(docLink.getAttribute('href')).toBe('/docs/enterprise-whitespace-and-kanban-board');
+
+      // Dismiss on Escape key on trigger
+      fireEvent.keyDown(groupHelp, { key: 'Escape' });
+      await waitFor(() => {
+        expect(
+          screen.queryByText('Primary board grouping axis defining vertical column divisions.')
+        ).toBeNull();
+      });
+    });
+
+    it('opens Sub-group Axis FieldHelpHint popover and verifies summary, defaultValue, and validValues (KAN-479)', async () => {
+      render(
+        <FilterDisplayBar
+          groupBy="state"
+          subGroupBy="none"
+          modulesEnabled={true}
+        />
+      );
+
+      const subGroupHelp = screen.getByTestId('subgroup-by-help');
+      fireEvent.click(subGroupHelp);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            'Secondary swimlane axis partitioning columns into horizontal swimlanes across the board.'
+          )
+        ).toBeDefined();
+      });
+
+      // Default value
+      expect(screen.getByTestId('subgroup-by-help-default')).toBeDefined();
+      expect(within(screen.getByTestId('subgroup-by-help-default')).getByText('None')).toBeDefined();
+
+      // Valid values list
+      expect(screen.getByText('Disable horizontal swimlanes.')).toBeDefined();
+      expect(screen.getByText('Partition columns into assignee swimlanes.')).toBeDefined();
+      expect(screen.getByText('Partition columns into priority swimlanes.')).toBeDefined();
+      expect(screen.getByText('Partition columns into workflow state swimlanes.')).toBeDefined();
+      expect(screen.getByText('Partition columns into sprint cycle swimlanes.')).toBeDefined();
+      expect(screen.getByText('Partition columns into feature module swimlanes.')).toBeDefined();
+      expect(screen.getByText('Partition columns into tag label swimlanes.')).toBeDefined();
+
+      // Documentation link
+      const docLink = screen.getByTestId('subgroup-by-help-doc-link');
+      expect(docLink.getAttribute('href')).toBe('/docs/enterprise-whitespace-and-kanban-board');
+
+      // Dismiss on Escape key on trigger
+      fireEvent.keyDown(subGroupHelp, { key: 'Escape' });
+      await waitFor(() => {
+        expect(
+          screen.queryByText(
+            'Secondary swimlane axis partitioning columns into horizontal swimlanes across the board.'
+          )
+        ).toBeNull();
+      });
+    });
+
+    it('enforces static AST invariants: zero inline styles and zero nested FieldHelpHint in label (KAN-479)', () => {
+      const source = fs.readFileSync(path.resolve(__dirname, 'FilterDisplayBar.tsx'), 'utf8');
+
+      // Zero inline style props
+      expect(source).not.toMatch(/style\s*=\s*\{\{/);
+
+      // Zero FieldHelpHint nested inside <label>...</label>
+      expect(source).not.toMatch(/<label[^>]*>(?:(?!<\/label>)[\s\S])*?<FieldHelpHint/i);
+
+      // Zero FieldHelpHint nested inside <button>...</button>
+      expect(source).not.toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*?<FieldHelpHint/i);
+    });
+
+    it('covers Display tune export, import, report modals, saved views selection, and callbacks (KAN-479)', () => {
+      const handleExport = vi.fn();
+      const handleImport = vi.fn();
+      const handleReports = vi.fn();
+      const handleSelectView = vi.fn();
+
+      const sampleSavedView = {
+        id: 'view-1',
+        project_id: 'proj-1',
+        name: 'Sprint 1 Filtered',
+        layout: 'board' as const,
+        group_by: 'state' as const,
+        sub_group_by: 'none' as const,
+      };
+      const sampleSavedView2 = {
+        id: 'view-2',
+        project_id: 'proj-1',
+        name: 'Sprint 2 Inactive',
+        layout: 'board' as const,
+        group_by: 'state' as const,
+        sub_group_by: 'none' as const,
+      };
+
+      const { unmount } = render(
+        <FilterDisplayBar
+          projectKey="KAN"
+          workspaceScope="kanban"
+          modulesEnabled={true}
+          savedViews={[sampleSavedView, sampleSavedView2]}
+          activeViewId="view-1"
+          onSelectSavedView={handleSelectView}
+          onExport={handleExport}
+          onImport={handleImport}
+          onExportReports={handleReports}
+        />
+      );
+
+      // Open Display popover
+      fireEvent.click(screen.getByRole('button', { name: /display configuration/i }));
+
+      // Click saved view inside Display popover
+      const viewBtn = screen.getByTestId('filter-display-saved-view-view-1');
+      fireEvent.click(viewBtn);
+      expect(handleSelectView).toHaveBeenCalledWith('view-1');
+
+      // Click saved view chip in bottom strip and change select
+      const viewChip = screen.getByTestId('saved-view-chip-view-1');
+      fireEvent.click(viewChip);
+      expect(handleSelectView).toHaveBeenCalledWith('view-1');
+
+      const viewSelect = screen.getByTestId('filter-display-saved-views-select');
+      fireEvent.change(viewSelect, { target: { value: 'view-1' } });
+      expect(handleSelectView).toHaveBeenCalledWith('view-1');
+      fireEvent.change(viewSelect, { target: { value: '' } });
+
+      // Reopen Display popover and trigger CSV export callback
+      fireEvent.click(screen.getByRole('button', { name: /display configuration/i }));
+      fireEvent.click(screen.getByTestId('filter-display-export-opt-csv'));
+      expect(handleExport).toHaveBeenCalledWith('csv');
+
+      // Reopen Display popover and trigger ZIP export callback
+      fireEvent.click(screen.getByRole('button', { name: /display configuration/i }));
+      fireEvent.click(screen.getByTestId('filter-display-export-opt-zip'));
+      expect(handleExport).toHaveBeenCalledWith('zip_csv');
+
+      // Reopen Display popover and trigger Reports callback
+      fireEvent.click(screen.getByRole('button', { name: /display configuration/i }));
+      fireEvent.click(screen.getByTestId('filter-display-reports-btn'));
+      expect(handleReports).toHaveBeenCalledTimes(1);
+
+      // Reopen Display popover and trigger Export Issues general button
+      fireEvent.click(screen.getByRole('button', { name: /display configuration/i }));
+      fireEvent.click(screen.getByTestId('filter-display-export-btn'));
+      expect(handleExport).toHaveBeenCalledWith('csv');
+
+      // Reopen Display popover and trigger Import callback
+      fireEvent.click(screen.getByRole('button', { name: /display configuration/i }));
+      fireEvent.click(screen.getByTestId('filter-display-import-btn'));
+      expect(handleImport).toHaveBeenCalledTimes(1);
+
+      unmount();
+
+      // Test fallback branch when export/import callbacks are omitted (modal launches)
+      render(
+        <FilterDisplayBar
+          projectKey="KAN"
+          workspaceScope="kanban"
+          modulesEnabled={true}
+        />
+      );
+
+      // 1. Launch ZIP modal fallback
+      fireEvent.click(screen.getByRole('button', { name: /display configuration/i }));
+      fireEvent.click(screen.getByTestId('filter-display-export-opt-zip'));
+      expect(screen.getByTestId('csv-modal-close-btn')).toBeDefined();
+      fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+
+      // 2. Launch Import modal fallback
+      fireEvent.click(screen.getByRole('button', { name: /display configuration/i }));
+      fireEvent.click(screen.getByTestId('filter-display-import-btn'));
+      expect(screen.getByTestId('csv-modal-close-btn')).toBeDefined();
+      fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+
+      // 3. Launch Reports modal fallback
+      fireEvent.click(screen.getByRole('button', { name: /display configuration/i }));
+      fireEvent.click(screen.getByTestId('filter-display-reports-btn'));
+      expect(screen.getByTestId('report-export-close-btn')).toBeDefined();
+      fireEvent.click(screen.getByTestId('report-export-close-btn'));
+
+      // 4. Launch general Export Issues modal fallback
+      fireEvent.click(screen.getByRole('button', { name: /display configuration/i }));
+      fireEvent.click(screen.getByTestId('filter-display-export-btn'));
+      expect(screen.getByTestId('csv-modal-close-btn')).toBeDefined();
+      fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+
+      // 5. Launch CSV option modal fallback
+      fireEvent.click(screen.getByRole('button', { name: /display configuration/i }));
+      fireEvent.click(screen.getByTestId('filter-display-export-opt-csv'));
+      expect(screen.getByTestId('csv-modal-close-btn')).toBeDefined();
+      fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+    });
+
+    it('covers unified toolbar search form, query mode toggle, and state filter popover (KAN-479)', () => {
+      const handleQueryChange = vi.fn();
+      const handleSubmit = vi.fn();
+      const handleModeChange = vi.fn();
+      const handleStateFilterChange = vi.fn();
+
+      const { rerender } = render(
+        <FilterDisplayBar
+          searchQuery="auth bug"
+          onSearchQueryChange={handleQueryChange}
+          onSearchSubmit={handleSubmit}
+          queryMode="basic"
+          onQueryModeChange={handleModeChange}
+          stateFilter={createAllStatesFilterPreference()}
+          onStateFilterChange={handleStateFilterChange}
+          modulesEnabled={true}
+        />
+      );
+
+      // Search input change and submit
+      const searchInput = screen.getByTestId('filter-display-search-input');
+      fireEvent.change(searchInput, { target: { value: 'regression' } });
+      expect(handleQueryChange).toHaveBeenCalledWith('regression');
+
+      fireEvent.submit(screen.getByTestId('filter-display-search-form'));
+      expect(handleSubmit).toHaveBeenCalledTimes(1);
+
+      // Trigger StateFilterPopover onChange
+      const stateTrigger = screen.getByTestId('navigator-filter-state');
+      fireEvent.click(stateTrigger);
+      const actionablePreset = screen.getByTestId('state-preset-actionable');
+      fireEvent.click(actionablePreset);
+      expect(handleStateFilterChange).toHaveBeenCalledTimes(1);
+
+      // Switch to Query mode
+      fireEvent.click(screen.getByTestId('mode-query-btn'));
+      expect(handleModeChange).toHaveBeenCalledWith('query');
+
+      // Switch back to Basic mode
+      fireEvent.click(screen.getByTestId('mode-basic-btn'));
+      expect(handleModeChange).toHaveBeenCalledWith('basic');
+
+      // Rerender with query mode
+      rerender(
+        <FilterDisplayBar
+          searchQuery="status = 'Done'"
+          onSearchQueryChange={handleQueryChange}
+          onSearchSubmit={handleSubmit}
+          queryMode="query"
+          onQueryModeChange={handleModeChange}
+          stateFilter={createAllStatesFilterPreference()}
+          onStateFilterChange={handleStateFilterChange}
+          modulesEnabled={true}
+        />
+      );
+
+      const queryInput = screen.getByTestId('filter-display-query-input');
+      fireEvent.change(queryInput, { target: { value: 'priority = "high"' } });
+      expect(handleQueryChange).toHaveBeenCalledWith('priority = "high"');
+    });
+
+    it('handles StateFilterPopover without onStateFilterChange handler (KAN-479)', () => {
+      render(
+        <FilterDisplayBar
+          projectStates={[
+            { id: 's1', name: 'Todo', color_hex: '#64748b', sort_order: 1, group: 'unstarted' },
+          ]}
+          stateFilter={createAllStatesFilterPreference()}
+          modulesEnabled={true}
+        />
+      );
+      const stateTrigger = screen.getByTestId('navigator-filter-state');
+      fireEvent.click(stateTrigger);
+      fireEvent.click(screen.getByTestId('state-preset-all'));
     });
   });
 });
