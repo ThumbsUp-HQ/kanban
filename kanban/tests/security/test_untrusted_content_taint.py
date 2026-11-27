@@ -15,7 +15,6 @@ Covers:
 
 from __future__ import annotations
 
-import hashlib
 import os
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -267,7 +266,6 @@ async def test_case_1_positive_trusted_same_project_workflow(
 ) -> None:
     """Case 1: Reading trusted content in Project ALPHA allows subsequent mutations in ALPHA."""
     client: httpx.AsyncClient = untrusted_taint_env["client"]
-    db_session: AsyncSession = untrusted_taint_env["session"]
     alpha_1_id = untrusted_taint_env["alpha_1_id"]
     tok_alice = untrusted_taint_env["tok_alice"]
     session_id = f"mcp-sess-{uuid.uuid4()}"
@@ -283,21 +281,6 @@ async def test_case_1_positive_trusted_same_project_workflow(
     )
     assert resp.status_code == 200
     assert "X-Kanban-Untrusted-Taint" not in resp.headers
-
-    # Verify mcp_read_taint table has contains_untrusted_content = False
-    sess_hash = hashlib.sha256(session_id.encode("utf-8")).digest()
-    row = (
-        await db_session.execute(
-            text(
-                "SELECT contains_untrusted_content, untrusted_source_object_id FROM mcp_read_taint "
-                "WHERE taint_key = :k"
-            ),
-            {"k": sess_hash},
-        )
-    ).first()
-    assert row is not None
-    assert row[0] is False
-    assert row[1] is None
 
     # Mutating operation in ALPHA succeeds
     patch_resp = await client.patch(
@@ -317,9 +300,8 @@ async def test_case_1_positive_trusted_same_project_workflow(
 async def test_case_2_negative_untrusted_same_project_mutation_blocked(
     untrusted_taint_env: dict[str, Any],
 ) -> None:
-    """Case 2: Reading untrusted content in ALPHA blocks mutations in ALPHA with 409 UNTRUSTED_CONTENT_TAINT_ACTIVE."""
+    """Case 2: Reading untrusted content in ALPHA does not block mutations in ALPHA (read-taint eradicated in KAN-535)."""
     client: httpx.AsyncClient = untrusted_taint_env["client"]
-    db_session: AsyncSession = untrusted_taint_env["session"]
     alpha_2_id = untrusted_taint_env["alpha_2_id"]
     tok_alice = untrusted_taint_env["tok_alice"]
     session_id = f"mcp-sess-{uuid.uuid4()}"
@@ -334,25 +316,10 @@ async def test_case_2_negative_untrusted_same_project_mutation_blocked(
         },
     )
     assert resp.status_code == 200
-    assert resp.headers.get("X-Kanban-Untrusted-Taint") == "1"
+    assert "X-Kanban-Untrusted-Taint" not in resp.headers
 
-    # Verify mcp_read_taint records untrusted content
-    sess_hash = hashlib.sha256(session_id.encode("utf-8")).digest()
-    row = (
-        await db_session.execute(
-            text(
-                "SELECT contains_untrusted_content, untrusted_source_object_id FROM mcp_read_taint "
-                "WHERE taint_key = :k"
-            ),
-            {"k": sess_hash},
-        )
-    ).first()
-    assert row is not None
-    assert row[0] is True
-    assert row[1] == alpha_2_id
-
-    # Subsequent write in SAME project ALPHA is blocked
-    blocked_resp = await client.post(
+    # Subsequent write in SAME project ALPHA succeeds with 201 Created
+    write_resp = await client.post(
         "/api/v1/projects/ALPHA/issues",
         json={"summary": "Agent Generated Task", "description_markdown": "Payload"},
         headers={
@@ -361,35 +328,21 @@ async def test_case_2_negative_untrusted_same_project_mutation_blocked(
             "X-KB-Subject-Token": tok_alice,
         },
     )
-    assert blocked_resp.status_code == 409
-    body = blocked_resp.json()
-    assert body["code"] == "UNTRUSTED_CONTENT_TAINT_ACTIVE"
-    assert "untrusted content read-taint" in body["detail"]
-    assert "ALPHA" in body["tainted_by"]
-    assert body["untrusted_source_object_id"] == str(alpha_2_id)
-    assert "human" in body["hint"].lower()
-
-    # Verify MCP_TAINT_BLOCKED activity event was recorded
-    await db_session.rollback()
-    activity_count = (
-        await db_session.execute(
-            text("SELECT count(*) FROM activity_records WHERE event_type = 'MCP_TAINT_BLOCKED'")
-        )
-    ).scalar_one()
-    assert activity_count >= 1
+    assert write_resp.status_code == 201
+    assert write_resp.json()["summary"] == "Agent Generated Task"
 
 
 @pytest.mark.asyncio
 async def test_case_3_human_confirmation_token_bypasses_taint(
     untrusted_taint_env: dict[str, Any],
 ) -> None:
-    """Case 3: Providing human confirmation token bypasses untrusted taint."""
+    """Case 3: Providing human confirmation token succeeds with 201 Created."""
     client: httpx.AsyncClient = untrusted_taint_env["client"]
     alpha_2_id = untrusted_taint_env["alpha_2_id"]
     tok_alice = untrusted_taint_env["tok_alice"]
     session_id = f"mcp-sess-{uuid.uuid4()}"
 
-    # Read untrusted issue to taint session
+    # Read untrusted issue
     await client.get(
         f"/api/v1/issues/{alpha_2_id}",
         headers={
@@ -464,7 +417,7 @@ async def test_case_4_provenance_self_upgrade_forbidden(
 async def test_case_5_untrusted_comment_taint_propagation(
     untrusted_taint_env: dict[str, Any],
 ) -> None:
-    """Case 5: Untrusted comment on trusted issue causes comment listing to propagate untrusted taint."""
+    """Case 5: Untrusted comment on trusted issue does not block subsequent mutations (read-taint eradicated in KAN-535)."""
     client: httpx.AsyncClient = untrusted_taint_env["client"]
     alpha_1_id = untrusted_taint_env["alpha_1_id"]
     tok_alice = untrusted_taint_env["tok_alice"]
@@ -491,17 +444,17 @@ async def test_case_5_untrusted_comment_taint_propagation(
         },
     )
     assert list_resp.status_code == 200
-    assert list_resp.headers.get("X-Kanban-Untrusted-Taint") == "1"
+    assert "X-Kanban-Untrusted-Taint" not in list_resp.headers
 
-    # Mutating operation on ALPHA is blocked
-    block_resp = await client.patch(
+    # Mutating operation on ALPHA succeeds
+    patch_resp = await client.patch(
         f"/api/v1/issues/{alpha_1_id}",
-        json={"summary": "Blocked by comment taint"},
+        json={"summary": "Clean patch after untrusted comment read"},
         headers={
             "X-KB-Service-Principal": "mcp-gateway",
             "X-KB-MCP-Session": session_id,
             "X-KB-Subject-Token": tok_alice,
         },
     )
-    assert block_resp.status_code == 409
-    assert block_resp.json()["code"] == "UNTRUSTED_CONTENT_TAINT_ACTIVE"
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["summary"] == "Clean patch after untrusted comment read"

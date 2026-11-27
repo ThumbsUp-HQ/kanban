@@ -16,12 +16,6 @@ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException
 from kanban.api.timing import timing_floor
 from kanban.api.v1.schemas.issues import IssueCreate, IssueList, IssuePatch, IssueResponse
-from kanban.security.read_taint import (
-    TaintGuard,
-    TaintRecorder,
-    get_taint_guard,
-    get_taint_recorder,
-)
 from kanban.services import issues as svc
 
 router = APIRouter(tags=["issues"])
@@ -142,9 +136,6 @@ async def create_issue(  # noqa: PLR0913, PLR0917
 ) -> IssueResponse:
     """Create an issue in a project (caller requires EDIT capability on project)."""
     async with timing_floor(floor_ms=25.0):
-        if request.headers.get("x-kb-mcp-session") or not request.headers.get("x-kb-internal-auth"):
-            taint_guard = get_taint_guard(request, session, caller)
-            await taint_guard.check_write(project_ref, tool_name="create_ticket")
         derived_tier = _derive_provenance_tier(request, caller)
         result, etag = await svc.create_issue(session, caller, project_ref, body)
         if derived_tier != "trusted_member":
@@ -169,7 +160,6 @@ async def get_issue(  # noqa: PLR0913, PLR0917
     session: Session,
     response: Response,
     request: Request,
-    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
     workspace: Annotated[str | None, Query(description="Optional workspace slug or UUID")] = None,
     lod: Annotated[
         Literal["summary", "standard", "full"],
@@ -181,13 +171,6 @@ async def get_issue(  # noqa: PLR0913, PLR0917
     workspace_ref = workspace or request.headers.get("x-kb-scope-workspace")
     async with timing_floor(floor_ms=25.0):
         issue = await svc.get_issue_or_404(session, caller, issue_key, workspace_ref=workspace_ref)
-        if getattr(issue, "is_untrusted_content", False):
-            response.headers["X-Kanban-Untrusted-Taint"] = "1"
-            await taint_recorder.record_untrusted_read(
-                issue.project_id, untrusted_source_object_id=issue.id
-            )
-        else:
-            await taint_recorder.record_project_ids([issue.project_id])
         serialized = await svc.serialize_issue(session, caller, issue, lod=lod)
         desc_sha = issue.description_sha256.hex() if issue.description_sha256 else ""
         etag = serialized.etag or (f'"{desc_sha}"' if desc_sha else '""')
@@ -231,13 +214,11 @@ async def patch_issue(  # noqa: PLR0913, PLR0917
     caller: Caller,
     session: Session,
     response: Response,
-    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> IssueResponse:
     """Update issue fields under description ETag concurrency check."""
     async with timing_floor(floor_ms=25.0):
-        issue = await svc.get_issue_or_404(session, caller, issue_key)
-        await taint_guard.check_write(issue.project_id, tool_name="update_ticket")
+        await svc.get_issue_or_404(session, caller, issue_key)
         result, new_etag = await svc.update_issue(session, caller, issue_key, body, if_match)
         await session.commit()
         response.headers["ETag"] = new_etag
@@ -253,8 +234,6 @@ async def list_issues(  # noqa: PLR0913
     project_ref: str,
     caller: Caller,
     session: Session,
-    response: Response,
-    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
     *,
     cursor: Annotated[str | None, Query(max_length=64)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -278,7 +257,7 @@ async def list_issues(  # noqa: PLR0913
             detail="Cannot filter only_archived=true when include_archived=false",
         )
     async with timing_floor(floor_ms=25.0):
-        res = await svc.list_issues(
+        return await svc.list_issues(
             session,
             caller,
             project_ref,
@@ -289,23 +268,3 @@ async def list_issues(  # noqa: PLR0913
             state_group=state_group,
             lod=lod,
         )
-        item_ids = [item.id for item in res.items]
-        untrusted_found = False
-        if item_ids:
-            untrusted_q = await session.execute(
-                text(
-                    "SELECT id FROM issues "
-                    "WHERE id = ANY(:ids) AND is_untrusted_content = TRUE LIMIT 1"
-                ),
-                {"ids": item_ids},
-            )
-            untrusted_row = untrusted_q.first()
-            if untrusted_row is not None:
-                untrusted_found = True
-                response.headers["X-Kanban-Untrusted-Taint"] = "1"
-                await taint_recorder.record_untrusted_read(
-                    project_ref, untrusted_source_object_id=untrusted_row[0]
-                )
-        if not untrusted_found:
-            await taint_recorder.record_project_ids([project_ref])
-        return res

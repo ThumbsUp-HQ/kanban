@@ -13,7 +13,6 @@ from kanban.api.v1.schemas.issue_move import (
     IssueMoveRequest,
     IssueMoveResponse,
 )
-from kanban.security.read_taint import TaintGuard, get_taint_guard
 from kanban.services.issue_keys import resolve_issue_ref
 from kanban.services.issue_move import move_issue
 
@@ -29,18 +28,16 @@ Session = Annotated[AsyncSession, Depends(get_rls_session)]
     response_model_exclude_none=False,
     summary="Move or reorder an issue on the board",
 )
-async def post_issue_move(  # noqa: PLR0913, PLR0917
+async def post_issue_move(
     issue_ref: str,
     body: IssueMoveRequest,
     caller: Caller,
     session: Session,
     response: Response,
-    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
 ) -> IssueMoveResponse:
     """Move an issue across columns or reorder it within a column (S6.4)."""
     async with timing_floor(floor_ms=25.0):
-        issue = await resolve_issue_ref(session, caller, issue_ref)
-        await taint_guard.check_write(issue.project_id, tool_name="move_issue")
+        await resolve_issue_ref(session, caller, issue_ref)
         res = await move_issue(session, caller, issue_ref, body, response=response)
         await session.commit()
         return res

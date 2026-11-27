@@ -40,7 +40,6 @@ from kanban.reports.sandbox import (
     render_sandboxed_template,
 )
 from kanban.reports.zip_packaging import create_aes256_zip
-from kanban.security.read_taint import TaintRecorder, get_taint_recorder
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.settings import get_settings
 
@@ -50,7 +49,6 @@ router = APIRouter(tags=["reports"])
 
 Caller = Annotated[PrincipalContext, Depends(get_principal)]
 Session = Annotated[AsyncSession, Depends(get_rls_session)]
-Taint = Annotated[TaintRecorder, Depends(get_taint_recorder)]
 
 _MAX_TEMPLATE_BYTES = 131072
 _MAX_EXPORT_ISSUES = 5000
@@ -577,7 +575,6 @@ async def preview_report(
     body: ReportPreviewRequest,
     caller: Caller,
     session: Session,
-    taint_recorder: Taint,
 ) -> ReportPreviewResponse:
     """Render a live preview of a report against up to 5 matching issues."""
     async with timing_floor(floor_ms=25.0):
@@ -602,16 +599,13 @@ async def preview_report(
                 detail="Either template_ref or template_markdown must be provided.",
             )
 
-        issues, project_idents = await _fetch_issue_rows(
+        issues, _project_idents = await _fetch_issue_rows(
             session=session,
             workspace_id=ws_id,
             project_id=proj_id,
             issue_ids=body.issue_ids,
             limit=_PREVIEW_ISSUE_LIMIT,
         )
-
-        if project_idents:
-            await taint_recorder.record_project_ids(project_idents)
 
         # Render preview bundle
         context = ReportContext(
@@ -643,7 +637,6 @@ async def generate_workspace_report(
     body: ReportGenerateRequest,
     caller: Caller,
     session: Session,
-    taint_recorder: Taint,
 ) -> Response:
     """Generate multi-format document report export for workspace issues."""
     async with timing_floor(floor_ms=25.0):
@@ -660,16 +653,13 @@ async def generate_workspace_report(
                 detail=f"Format '{body.format}' is not permitted for template '{tpl.name}'.",
             )
 
-        issues, project_idents = await _fetch_issue_rows(
+        issues, _project_idents = await _fetch_issue_rows(
             session=session,
             workspace_id=ws_id,
             project_id=None,
             issue_ids=body.issue_ids,
             limit=_MAX_EXPORT_ISSUES,
         )
-
-        if project_idents:
-            await taint_recorder.record_project_ids(project_idents)
 
         ws_name = "Workspace"
         ws_obj = (
@@ -733,7 +723,6 @@ async def generate_project_report(
     body: ReportGenerateRequest,
     caller: Caller,
     session: Session,
-    taint_recorder: Taint,
 ) -> Response:
     """Generate multi-format document report export for project issues."""
     async with timing_floor(floor_ms=25.0):
@@ -751,16 +740,13 @@ async def generate_project_report(
                 detail=f"Format '{body.format}' is not permitted for template '{tpl.name}'.",
             )
 
-        issues, project_idents = await _fetch_issue_rows(
+        issues, _project_idents = await _fetch_issue_rows(
             session=session,
             workspace_id=caller.workspace_id,
             project_id=proj_id,
             issue_ids=body.issue_ids,
             limit=_MAX_EXPORT_ISSUES,
         )
-
-        project_idents.add(proj_ident)
-        await taint_recorder.record_project_ids(project_idents)
 
         proj_name = proj_ident
         proj_obj = (

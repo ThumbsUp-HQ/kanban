@@ -69,7 +69,7 @@ Read the complete installation, authentication, MCP integration, and production 
 | :--- | :--- |
 | **[Wiki Home & Onboarding](https://github.com/ThumbsUp-HQ/kanban/wiki/Home)** | Full start guide, UI tour, keyboard shortcuts, and architectural entry points |
 | **[System Topology & Multi-Container Architecture](https://github.com/ThumbsUp-HQ/kanban/wiki/System-Topology-and-Multi-Container-Architecture)** | 5-network production isolation (`edge_net`, `app_net`, `data_net`, `sandbox_net`, `egress_llm_net`), Caddy TLS 1.3, and `Valkey 8` |
-| **[Three-Surface MCP Server](https://github.com/ThumbsUp-HQ/kanban/wiki/Three-Surface-MCP-Server-Architecture) & [Tools Reference](https://github.com/ThumbsUp-HQ/kanban/wiki/MCP-Tools-Reference)** | `/mcp/agent`, `/mcp/docs`, `/mcp/admin`, OAuth 2.1 + PKCE `S256`, LOD YAML, and `mcp_read_taint` |
+| **[Three-Surface MCP Server](https://github.com/ThumbsUp-HQ/kanban/wiki/Three-Surface-MCP-Server-Architecture) & [Tools Reference](https://github.com/ThumbsUp-HQ/kanban/wiki/MCP-Tools-Reference)** | `/mcp/agent`, `/mcp/docs`, `/mcp/admin`, OAuth 2.1 + PKCE `S256`, LOD YAML, and explicit `CredentialBoundary` key scoping |
 | **[Zero-Trust Security](https://github.com/ThumbsUp-HQ/kanban/wiki/Zero-Trust-Security-and-Access-Visibility) & [Multi-Card Auth Studio](https://github.com/ThumbsUp-HQ/kanban/wiki/Multi-Card-Authentication-Studio)** | PostgreSQL `FORCE RLS`, OIDC/OAuth2/LDAPS/Passkeys, AAL2 admin gates, and `🛡️` Access Inspector |
 | **[Scripted Workflows & Transition Helpers](https://github.com/ThumbsUp-HQ/kanban/wiki/Scripted-Workflows-and-Transition-Helpers)** | Wasmtime validators, `nsjail` sandboxes, and `:ro` async agent transition gates |
 | **[Production Promotion & Backup](https://github.com/ThumbsUp-HQ/kanban/wiki/Production-Promotion-and-Backup-Runbook) & [Migration Runbook](https://github.com/ThumbsUp-HQ/kanban/wiki/Migration-and-Cutover-Runbook)** | `kanban-ctl` AES-256-GCM `.kbbak` archives, standalone promotion, and importers |
@@ -124,7 +124,7 @@ Every Kanban board looks identical until you inspect who controls the auth cards
   - `/mcp/agent` (**9 tools**): `search_tickets`, `read_ticket`, `create_ticket`, `update_ticket`, `begin_work`, `transition_ticket`, `complete_work`, `add_comment`, `link_objects` (schema budget `<= 2,450` tokens).
   - `/mcp/docs` (**3 consolidated tools**): `search`, `create`, `update` with surgical diff-patching and `if_match` ETag concurrency protection (schema budget `<= 1,350` tokens).
   - `/mcp/admin` (**12 tools**): governance, auth cards, workflow hooks, custom fields, link auditor, and 2-stage `destructive_lifecycle` (`request_delete` -> `execute_delete` with 5-minute token, confirmation phrase, and SHA-256 blast hash).
-- **Compact LOD YAML & Read-Taint Defense:** `InlineSafeDumper` strips nulls and empty containers while `lod=summary|standard|full` lets agents request only the fields they need (`93.91%` reduction in `mcp/bench/token_benchmark.py` vs raw REST JSON). Session-bound `mcp_read_taint` blocks cross-scope prompt-injection exfiltration (`CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED`).
+- **Compact LOD YAML & Explicit Key-Scoping:** `InlineSafeDumper` strips nulls and empty containers while `lod=summary|standard|full` lets agents request only the fields they need (`93.91%` reduction in `mcp/bench/token_benchmark.py` vs raw REST JSON). Explicit `CredentialBoundary` key-scoping (`project`, `workspace`, `global`) combined with PostgreSQL `FORCE RLS` strictly enforces tenant and project boundaries at the database row level without stateful taint overhead.
   ```yaml
   key: KAN-1
   issue_key: KAN-1
@@ -172,9 +172,9 @@ flowchart LR
 
 | Package | Responsibility | Key Invariants |
 | :--- | :--- | :--- |
-| **`database/`** | 93 SQLAlchemy 2.0 models, 86 Alembic single-head migrations / SQL up files, Universal Object Graph, SHA-256 `activity_records` | `FORCE ROW LEVEL SECURITY` (`NOBYPASSRLS`), zero-context fail closed, canonical UTF-8 Markdown only |
+| **`database/`** | 92 SQLAlchemy 2.0 models, 87 Alembic single-head migrations / SQL up files, Universal Object Graph, SHA-256 `activity_records` | `FORCE ROW LEVEL SECURITY` (`NOBYPASSRLS`), zero-context fail closed, canonical UTF-8 Markdown only |
 | **`kanban/`** | FastAPI app (`297` paths, `397` operations, `394` schemas), Multi-Card Auth, Sanitization, Wasmtime/`nsjail`, React 19 SPA (`kanban/web/`) | `require_admin_aal2` on `/api/v1/admin/*`, 25ms timing-floor `404`s, strict CSP + Trusted Types |
-| **`mcp/`** | 3 isolated Streamable HTTP surfaces (`10` agent + `3` docs + `12` admin = `25` tools; 24 standard suite), OAuth 2.1 + PKCE `S256` | `InlineSafeDumper` LOD YAML, 2-stage delete blast hash, `mcp_read_taint`, forbidden from importing `database/` |
+| **`mcp/`** | 3 isolated Streamable HTTP surfaces (`10` agent + `3` docs + `12` admin = `25` tools; 24 standard suite), OAuth 2.1 + PKCE `S256` | `InlineSafeDumper` LOD YAML, 2-stage delete blast hash, explicit `CredentialBoundary` key scoping, forbidden from importing `database/` |
 | **`agent/`** | LLM `ProviderRouter` (`openai`, `gemini`, `ollama`, `fixture`), Sparkle FIM (`<150ms` p95), `cli_pipe` & mTLS `remote_runner` | `AirGapGuard` fail-closed egress, zero-shell `execve`, `kanban-agent validate-*` offline test workbench |
 
 ---

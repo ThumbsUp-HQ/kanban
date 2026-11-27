@@ -19,7 +19,6 @@ from kanban.api.v1.schemas.search import (
     SearchMode,
     SearchResponse,
 )
-from kanban.security.read_taint import TaintRecorder, get_taint_recorder
 from kanban.services import search as svc
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -32,7 +31,6 @@ Session = Annotated[AsyncSession, Depends(get_rls_session)]
 async def search_unified(  # noqa: PLR0913, PLR0917
     caller: Caller,
     session: Session,
-    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
     q: Annotated[str, Query(description="Search query string")] = "",
     kinds: Annotated[
         str | None,
@@ -55,7 +53,7 @@ async def search_unified(  # noqa: PLR0913, PLR0917
     """Execute unified search under caller RLS."""
     async with timing_floor(floor_ms=25.0):
         kinds_list = [k.strip() for k in kinds.split(",") if k.strip()] if kinds else None
-        res = await svc.search_unified(
+        return await svc.search_unified(
             session=session,
             caller=caller,
             query=q,
@@ -65,10 +63,6 @@ async def search_unified(  # noqa: PLR0913, PLR0917
             cursor=cursor,
             mode=mode,
         )
-        pids = {item.project_identifier for item in res.items if item.project_identifier}
-        if pids:
-            await taint_recorder.record_project_ids(pids)
-        return res
 
 
 @router.post("/issues", response_model=IssueSearchResponse, summary="Structured issue search")
@@ -77,7 +71,6 @@ async def search_issues(
     caller: Caller,
     session: Session,
     request: Request,
-    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
 ) -> IssueSearchResponse:
     """Execute issue-scoped search composed with FilterSpec DSL predicates."""
     ws_scope = body.workspace or request.headers.get("x-kb-scope-workspace")
@@ -85,15 +78,11 @@ async def search_issues(
     if ws_scope and not body.workspace:
         effective_body = body.model_copy(update={"workspace": ws_scope})
     async with timing_floor(floor_ms=25.0):
-        res = await svc.search_issues(
+        return await svc.search_issues(
             session=session,
             caller=caller,
             request=effective_body,
         )
-        pids = {item.project_identifier for item in res.items if item.project_identifier}
-        if pids:
-            await taint_recorder.record_project_ids(pids)
-        return res
 
 
 @router.post(
@@ -105,16 +94,11 @@ async def search_knowledge(
     body: KnowledgeSearchRequest,
     caller: Caller,
     session: Session,
-    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
 ) -> KnowledgeSearchResponse:
     """Execute knowledge search across docs, pages, and stickies under caller RLS."""
     async with timing_floor(floor_ms=25.0):
-        res = await svc.search_knowledge(
+        return await svc.search_knowledge(
             session=session,
             caller=caller,
             request=body,
         )
-        pids = {item.project_identifier for item in res.items if item.project_identifier}
-        if pids:
-            await taint_recorder.record_project_ids(pids)
-        return res

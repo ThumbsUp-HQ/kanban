@@ -86,12 +86,13 @@ To eliminate catastrophic accidental deletions by autonomous agents, thumbs-up-k
    - The server verifies token validity, checks caller identity, re-computes the blast hash to detect concurrent modifications (TOCTOU protection), and executes the deletion.
    - Permanent purging requires prior soft-trashing unless invoked with Server Admin credentials (`SOFT_TRASH_REQUIRED_FIRST`).
 
-### Read-Taint High-Water Mark Defense
+### Explicit CredentialBoundary Key Scoping Defense
 
-Under Section 3.5 and Section 11 of the architecture spec, thumbs-up-kanban implements a read-taint tracking engine:
-- If an agent reads a restricted resource (e.g., a ticket marked with confidential security tags or restricted ACLs) during an active session, the session high-water mark records the audience boundary.
-- If the agent subsequently attempts to write to a broader or public surface (e.g., posting a comment on a public ticket or exporting data) within the same session, the server halts execution with error code `CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED` and emits audit event `MCP_TAINT_BLOCKED`.
-- This prevents autonomous sub-agents from acting as confused deputies or exfiltrating private data.
+Under Section 3.5 and Section 11 of the architecture spec, thumbs-up-kanban implements explicit CredentialBoundary key scoping:
+- API keys declare explicit scope tiers (`project`, `workspace`, `global`) with allowed projects and capability bitmasks.
+- The MCP gateway strictly enforces connection scoping on mutating tools prior to dispatch.
+- FastAPI dependency injection propagates `CredentialBoundary` directly into `RLSContext(credential_boundary=...)`.
+- PostgreSQL `FORCE ROW LEVEL SECURITY` kernel policies (`app_credential_workspaces()`, `app_credential_projects()`) enforce isolation at the database row level without stateful taint session tracking.
 
 ---
 

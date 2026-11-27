@@ -492,6 +492,9 @@ def enforce_connection_scope_on_tool_call(
             "manage_stickies",
             "upsert_doc",
             "architect_project",
+            "update_workpad",
+            "add_comment",
+            "link_objects",
         }
     )
     ident = (

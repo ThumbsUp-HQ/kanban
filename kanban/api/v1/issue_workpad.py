@@ -16,7 +16,6 @@ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.timing import timing_floor
 from kanban.issues.workpad_service import get_issue_workpad, put_issue_workpad
 from kanban.security.ratelimit import ISSUE_WORKPAD_RATE_LIMIT, rate_limited
-from kanban.security.read_taint import TaintGuard, get_taint_guard
 
 router = APIRouter(tags=["issue-workpad"])
 
@@ -91,7 +90,6 @@ async def api_put_workpad(
     body: PutIssueWorkpadRequest,
     caller: Caller,
     session: Session,
-    _taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
     """Update or create the workpad slot without emitting comments or notifications."""

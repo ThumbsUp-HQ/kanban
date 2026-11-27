@@ -69,17 +69,6 @@ PROBLEM_HELP_CATALOG: dict[str, tuple[str, str]] = {
         "/docs/three-surface-mcp-server-architecture#scope-tiers",
         "The MCP access key is restricted to a narrower project or workspace scope.",
     ),
-    "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED": (
-        "/docs/zero-trust-security-and-access-visibility#read-taint-high-water-mark",
-        (
-            "Session read-taint guard requires explicit confirmation before writing "
-            "across project boundaries."
-        ),
-    ),
-    "MCP_TAINT_BLOCKED": (
-        "/docs/zero-trust-security-and-access-visibility#read-taint-high-water-mark",
-        "Cross-project write blocked by session read-taint exfiltration protection.",
-    ),
     "LOCKOUT_PREVENTED": (
         "/docs/multi-card-authentication-studio#lockout-prevention",
         "Cannot disable or delete the last active administrator authentication card.",

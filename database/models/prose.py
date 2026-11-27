@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Re-export knowledge and prose models with content provenance tiers (KB-SEC-TAINT-01)."""
+"""Re-export knowledge and prose models with content provenance tiers (KB-SEC-PROV-01)."""
 
 from __future__ import annotations
 

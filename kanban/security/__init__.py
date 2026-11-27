@@ -45,12 +45,6 @@ from kanban.security.push_protection import (
     redact_text_findings,
     scan_text_for_secrets,
 )
-from kanban.security.read_taint import (
-    TaintGuard,
-    TaintRecorder,
-    get_taint_guard,
-    get_taint_recorder,
-)
 from kanban.security.scrubber import (
     ScrubFinding,
     ScrubResult,
@@ -95,8 +89,6 @@ __all__ = [
     "SecretKind",
     "SecurityHeadersMiddleware",
     "StaticKekProvider",
-    "TaintGuard",
-    "TaintRecorder",
     "UnknownKekError",
     "build_access_manifest",
     "calculate_shannon_entropy",
@@ -104,8 +96,6 @@ __all__ = [
     "derive_subkey",
     "enforce_secret_push_protection",
     "evaluate_capabilities",
-    "get_taint_guard",
-    "get_taint_recorder",
     "is_exempt_token",
     "load_key_material",
     "mask_fingerprint",

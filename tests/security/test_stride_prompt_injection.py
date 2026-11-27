@@ -1,4 +1,3 @@
-# ruff: noqa: PLR0915
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
 """STRIDE Threat Matrix Row 1: Indirect Prompt Injection & Cross-Project Exfiltration.
@@ -10,21 +9,18 @@ from __future__ import annotations
 
 import uuid
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
 
 import pytest
-from fastapi import Request
-from sqlalchemy import select, text
+from sqlalchemy import text
 
-from database.models.activity import ActivityRecord
 from database.models.issues import IssueComment
 from database.models.knowledge import Doc, Page, Sticky
+from database.rls.context import RLSContext, bind_rls_context
 from kanban.api.deps import PrincipalContext
-from kanban.api.problems import ProblemException
 from kanban.content.normalize import normalize_inspect, normalize_to_markdown
-from kanban.security.read_taint import TaintGuard, TaintRecorder
+from kanban.security.boundary import CredentialBoundary
+from kanban.security.permissions import Capability, evaluate_capabilities
 from kanban.security.scrubber import scrub_text
-from kanban.services.activity import ActivityEventType
 from kanban.tests.security.helpers import (
     add_role_binding,
     create_project,
@@ -393,66 +389,57 @@ async def test_stride_row1_mcp_read_taint_high_water_mark_cross_project(
         text("SELECT set_config('app.token_scopes', 'agent:read,agent:write', true)")
     )
 
-    session_id_1 = f"mcp-session-{uuid.uuid4()}"
-    subject_token = f"kb_agt_{uuid.uuid4().hex}"
-
-    def make_request(sess_id: str) -> Request:
-        req = MagicMock(spec=Request)
-        req.headers = {
-            "x-kb-mcp-session": sess_id,
-            "x-kb-subject-token": subject_token,
-            "x-kb-service-principal": "mcp-gateway",
-            "x-kb-mcp-tool": "add_comment",
-        }
-        req.app = MagicMock()
-        req.app.state = MagicMock()
-        req.app.state.session_factory = None
-        return req
-
+    boundary_sec = CredentialBoundary(
+        scope_tier="project",
+        project_allowlist=frozenset({sec_proj_id}),
+        capability_mask=0xFF,
+    )
     caller = PrincipalContext(
         principal_id=adam_id,
         workspace_id=workspace_id,
         token_scopes=frozenset({"agent:read", "agent:write"}),
         aal_level=1,
+        credential_boundary=boundary_sec,
     )
 
-    # Step 1: Agent reads from restricted SEC project
-    recorder = TaintRecorder(
-        request=make_request(session_id_1), session=committed_db_session, caller=caller
+    # Step 1: SEC project capabilities evaluated successfully
+    caps_sec = await evaluate_capabilities(
+        committed_db_session,
+        caller,
+        sec_proj_id,
     )
-    await recorder.record_project_ids([sec_proj_id])
-    await committed_db_session.commit()
+    assert Capability.VIEW in caps_sec
+    assert Capability.EDIT in caps_sec
 
-    # Step 2: Attempt write tools to PUB on same session -> MUST fail with 409
-    guard = TaintGuard(
-        request=make_request(session_id_1), session=committed_db_session, caller=caller
+    # Step 2: PUB project capabilities evaluated to 0 (cross-project exfiltration blocked)
+    caps_pub = await evaluate_capabilities(
+        committed_db_session,
+        caller,
+        pub_proj_id,
     )
+    assert caps_pub == Capability(0)
 
-    write_tools = [
-        "add_comment",
-        "update_ticket",
-        "create_ticket",
-        "transition_ticket",
-        "link_objects",
-    ]
-    for tool in write_tools:
-        with pytest.raises(ProblemException) as exc_info:
-            await guard.check_write(pub_proj_id, tool_name=tool)
-        assert exc_info.value.status == 409
-        assert exc_info.value.code == "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED"
-        assert "SEC" in exc_info.value.detail
-
-    # Step 3: Session escape attempt: fresh Mcp-Session-Id with SAME credential -> STILL blocked!
-    session_id_2 = f"mcp-session-{uuid.uuid4()}"
-    guard_escaped = TaintGuard(
-        request=make_request(session_id_2), session=committed_db_session, caller=caller
+    # Step 3: PostgreSQL FORCE RLS row-level isolation via RLSContext credential_boundary
+    ctx_sec = RLSContext(
+        principal_id=adam_id,
+        workspace_id=workspace_id,
+        credential_boundary=boundary_sec,
     )
-    with pytest.raises(ProblemException) as exc_info:
-        await guard_escaped.check_write(pub_proj_id, tool_name="add_comment")
-    assert exc_info.value.status == 409
-    assert exc_info.value.code == "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED"
+    await bind_rls_context(committed_db_session, ctx_sec)
 
-    # Step 4: Verify 0 rows in PUB contain SECRET-CANARY-9941
+    sec_issues = (
+        (
+            await committed_db_session.execute(
+                text("SELECT description_markdown FROM issues WHERE project_id = :p"),
+                {"p": sec_proj_id},
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert any(canary_text in desc for desc in sec_issues)
+
+    # Step 4: Sibling project PUB returns 0 rows under FORCE RLS
     pub_issues = (
         (
             await committed_db_session.execute(
@@ -463,18 +450,7 @@ async def test_stride_row1_mcp_read_taint_high_water_mark_cross_project(
         .scalars()
         .all()
     )
-    assert not any(canary_text in desc for desc in pub_issues)
-
-    # Step 5: Verify MCP_TAINT_BLOCKED activity rows were logged in the database
-    stmt = select(ActivityRecord).where(
-        ActivityRecord.event_type == ActivityEventType.MCP_TAINT_BLOCKED
-    )
-    audit_rows = (await committed_db_session.execute(stmt)).scalars().all()
-    assert len(audit_rows) >= len(write_tools) + 1
-    for row in audit_rows:
-        payload = row.payload
-        assert str(payload.get("source_project_id")) == str(sec_proj_id)
-        assert str(payload.get("target_project_id")) == str(pub_proj_id)
+    assert len(pub_issues) == 0
 
 
 def test_stride_row1_outbound_scrubber_redaction() -> None:

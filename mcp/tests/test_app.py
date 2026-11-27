@@ -272,13 +272,12 @@ async def test_internal_client_csrf_and_context_scope() -> None:
             return httpx.Response(
                 409,
                 json={
-                    "type": "urn:problem-type:cross-scope-taint",
+                    "type": "urn:problem-type:conflict",
                     "code": "AMBIGUOUS_IDENTIFIER",
-                    "detail": "Tainted",
+                    "detail": "Ambiguous",
                     "layer": "database",
                     "candidates": [{"id": "1"}],
                     "blockers": ["b1"],
-                    "tainted_by": ["usr_1"],
                     "unauthorized_mentions": ["@secret"],
                 },
             )
@@ -313,12 +312,11 @@ async def test_internal_client_csrf_and_context_scope() -> None:
             await client.request("POST", "/api/v1/problem-extra", json_data={})
 
         err = exc_info.value
-        assert err.code == McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
+        assert err.code == McpErrorCode.AMBIGUOUS_IDENTIFIER
         assert "database" in str(err.hint)
         assert err.candidates == [{"id": "1"}]
         assert err.blockers == ["b1"]
         assert err.extra is not None
-        assert err.extra.get("tainted_by") == ["usr_1"]
         assert err.extra.get("unauthorized_mentions") == ["@secret"]
 
     finally:
@@ -403,7 +401,7 @@ async def test_internal_client_edge_branches() -> None:
         {
             "type": "urn:problem:conflict",
             "code": "ALREADY_PROMOTED",
-            "extra": {"tainted_by": ["usr_1"]},
+            "extra": {"candidates": [{"id": "1"}]},
         },
         {
             "type": "urn:problem:mention-access-warning",
@@ -412,10 +410,6 @@ async def test_internal_client_edge_branches() -> None:
         {
             "type": "urn:problem:transition-held",
             "code": "TRANSITION_HELD",
-        },
-        {
-            "type": "urn:problem:cross-scope-taint",
-            "code": "GENERIC",
         },
     ]
 

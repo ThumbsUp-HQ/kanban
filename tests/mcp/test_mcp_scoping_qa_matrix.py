@@ -23,10 +23,7 @@ from typing import Any
 
 import httpx
 import pytest
-from starlette.requests import Request
 
-from kanban.api.problems import ProblemException
-from kanban.security.read_taint import TaintGuard
 from kanban.tests.contract import ContractRecorder
 from mcp.app import create_mcp_app
 from mcp.auth import (
@@ -1193,8 +1190,7 @@ async def test_condition_f_protocol_headers_session_taintguard_revocation() -> N
     2. Conflicting X-Workspace-Slug vs path -> 400 CONFLICTING_SCOPE_HEADERS.
     3. X-Project-Key without workspace -> 400 VALIDATION_FAILED.
     4. Mcp-Session-Id replay across scopes/keys -> 404.
-    5. TaintGuard read->broader-write -> CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED.
-    6. Revoked key post-15s TTL -> 401.
+    5. Revoked key post-15s TTL -> 401.
     """
     simulated_time = 1000.0
 
@@ -1285,65 +1281,7 @@ async def test_condition_f_protocol_headers_session_taintguard_revocation() -> N
         "condition_f_session_token_replay_404", replay_key_resp.request, replay_key_resp
     )
 
-    # 5. TaintGuard assertion: read->broader-write -> CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
-    # Test via MCP tool call against upstream returning 409
-    init_sess_taint = await client.post(
-        "/mcp/agent/w/kanban",
-        headers={"Authorization": f"Bearer {valid_key}"},
-        json={"jsonrpc": "2.0", "id": 75, "method": "initialize", "params": {}},
-    )
-    sess_id_taint = init_sess_taint.headers.get("mcp-session-id")
-
-    taint_call = await client.post(
-        "/mcp/agent/w/kanban",
-        headers={"Authorization": f"Bearer {valid_key}", "mcp-session-id": str(sess_id_taint)},
-        json={
-            "jsonrpc": "2.0",
-            "id": 76,
-            "method": "tools/call",
-            "params": {
-                "name": "create_ticket",
-                "arguments": {
-                    "project": "QAADM",
-                    "summary": "TRIGGER_TAINT_REJECTION",
-                },
-            },
-        },
-    )
-    assert taint_call.status_code == 200
-    taint_res = taint_call.json()["result"]
-    assert taint_res["isError"]
-    assert "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED" in taint_res["content"][0]["text"]
-    qa_contract_recorder.record("condition_f_taint_guard_rejection", taint_call.request, taint_call)
-
-    # Direct unit test of TaintGuard class preconditions
-    class _MockPrincipal:
-        id = uuid.uuid4()
-        token = "test_token"
-
-    class _MockSession:
-        pass
-
-    from kanban.security.service_auth import create_internal_service_auth_header  # noqa: PLC0415
-
-    auth_hdr = create_internal_service_auth_header(
-        principal="mcp-gateway",
-        method="GET",
-        path="/api/v1/issues",
-        body_bytes=b"",
-    )
-    scope_no_sess = {
-        "type": "http",
-        "method": "GET",
-        "path": "/api/v1/issues",
-        "headers": [(b"x-kb-internal-auth", auth_hdr.encode("ascii"))],
-    }
-    with pytest.raises(ProblemException) as exc_missing:
-        TaintGuard(Request(scope_no_sess), _MockSession(), _MockPrincipal())  # type: ignore[arg-type]
-    assert exc_missing.value.code == "MISSING_MCP_SESSION"
-    assert exc_missing.value.status == 400
-
-    # 6. Revoked key post-15s TTL -> 401
+    # 5. Revoked key post-15s TTL -> 401
     revoked_token = "kb_agt_revoked_key_000000000000000001"
     rev_client, _calls2, _ = _build_matrix_test_env(
         custom_tokens={
@@ -1441,7 +1379,6 @@ async def test_condition_f_protocol_headers_session_taintguard_revocation() -> N
             "missing_workspace_status": 400,
             "missing_workspace_error": "VALIDATION_FAILED",
             "session_replay_rejection": 404,
-            "taint_guard_rejection": "409 CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED",
             "ttl_revocation_status": 401,
         },
     }

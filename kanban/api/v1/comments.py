@@ -22,12 +22,6 @@ from kanban.api.v1.schemas.comments import (
     ReactionResponse,
 )
 from kanban.security.ratelimit import ISSUE_COMMENTS_RATE_LIMIT, rate_limited
-from kanban.security.read_taint import (
-    TaintGuard,
-    TaintRecorder,
-    get_taint_guard,
-    get_taint_recorder,
-)
 from kanban.services import comments as svc
 from kanban.services.issue_keys import resolve_issue_ref
 
@@ -51,42 +45,16 @@ async def _principal_rate_key(request: Request) -> list[str]:
     response_model=CommentList,
     summary="List comments on an issue with nested replies",
 )
-async def list_issue_comments(  # noqa: PLR0913, PLR0917
+async def list_issue_comments(
     issue_ref: str,
     caller: Annotated[PrincipalContext, Depends(get_principal)],
     session: Annotated[AsyncSession, Depends(get_rls_session)],
-    response: Response,
-    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
     cursor: Annotated[str | None, Query(max_length=128)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> CommentList:
     """Return top-level comments ordered created_at ASC with up to 200 inlined replies."""
     async with timing_floor(floor_ms=25.0):
-        issue = await resolve_issue_ref(session, caller, issue_ref)
-        is_untrusted = bool(getattr(issue, "is_untrusted_content", False))
-        untrusted_id = issue.id if is_untrusted else None
-
-        if not is_untrusted:
-            comment_untrusted_q = await session.execute(
-                text(
-                    "SELECT id FROM issue_comments "
-                    "WHERE issue_id = :iid AND is_untrusted_content = TRUE LIMIT 1"
-                ),
-                {"iid": issue.id},
-            )
-            comment_untrusted_row = comment_untrusted_q.first()
-            if comment_untrusted_row is not None:
-                is_untrusted = True
-                untrusted_id = comment_untrusted_row[0]
-
-        if is_untrusted:
-            response.headers["X-Kanban-Untrusted-Taint"] = "1"
-            await taint_recorder.record_untrusted_read(
-                issue.project_id, untrusted_source_object_id=untrusted_id
-            )
-        else:
-            await taint_recorder.record_project_ids([issue.project_id])
-
+        await resolve_issue_ref(session, caller, issue_ref)
         return await svc.list_comments(
             session=session,
             caller=caller,
@@ -110,12 +78,10 @@ async def create_issue_comment(  # noqa: PLR0913, PLR0917
     session: Annotated[AsyncSession, Depends(get_rls_session)],
     response: Response,
     request: Request,
-    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
 ) -> CommentResponse:
     """Create comment after normalization, check mention access, and emit activity."""
     async with timing_floor(floor_ms=25.0):
-        issue = await resolve_issue_ref(session, caller, issue_ref)
-        await taint_guard.check_write(issue.project_id, tool_name="add_comment")
+        await resolve_issue_ref(session, caller, issue_ref)
         derived_tier = _derive_provenance_tier(request, caller)
         result, etag = await svc.create_comment(
             session=session,

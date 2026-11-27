@@ -381,10 +381,6 @@ class KanbanApiClient:
         prob_blockers = problem.get("blockers")
         blockers_list = [str(b) for b in prob_blockers] if isinstance(prob_blockers, list) else None
         extra_dict: dict[str, Any] = {}
-        if "tainted_by" in problem:
-            extra_dict["tainted_by"] = problem["tainted_by"]
-        elif isinstance(problem.get("extra"), dict) and "tainted_by" in problem["extra"]:
-            extra_dict["tainted_by"] = problem["extra"]["tainted_by"]
         if "unauthorized_mentions" in problem:
             extra_dict["unauthorized_mentions"] = problem["unauthorized_mentions"]
         for secret_key in ("rule_id", "secret_kind", "line", "fingerprint"):
@@ -519,9 +515,6 @@ class KanbanApiClient:
             "AMBIGUOUS_IDENTIFIER": McpErrorCode.AMBIGUOUS_IDENTIFIER,
             "ALREADY_PROMOTED": McpErrorCode.ALREADY_PROMOTED,
             "LINK_TYPE_NOT_ALLOWED": McpErrorCode.LINK_TYPE_NOT_ALLOWED,
-            "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED": (
-                McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
-            ),
             "MENTION_ACCESS_WARNING": McpErrorCode.MENTION_ACCESS_WARNING,
             "LINK_NOT_FLAGGED": McpErrorCode.LINK_NOT_FLAGGED,
             "CREATOR_UNCHANGED": McpErrorCode.CREATOR_UNCHANGED,
@@ -540,8 +533,6 @@ class KanbanApiClient:
         }
         if prob_code in conflict_map:
             return conflict_map[prob_code]
-        if prob_type.endswith("cross-scope-taint"):
-            return McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
         if prob_type.endswith("mention-access-warning"):
             return McpErrorCode.MENTION_ACCESS_WARNING
         for name, code in conflict_map.items():
@@ -566,9 +557,6 @@ class KanbanApiClient:
             "SOURCE_NOT_FOUND": McpErrorCode.NOT_FOUND,
             "ALREADY_PROMOTED": McpErrorCode.ALREADY_PROMOTED,
             "LINK_TYPE_NOT_ALLOWED": McpErrorCode.LINK_TYPE_NOT_ALLOWED,
-            "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED": (
-                McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
-            ),
             "MENTION_ACCESS_WARNING": McpErrorCode.MENTION_ACCESS_WARNING,
             "SELF_LINK": McpErrorCode.VALIDATION_FAILED,
             "CREATOR_NOT_ELIGIBLE": McpErrorCode.CREATOR_NOT_ELIGIBLE,
@@ -613,7 +601,6 @@ class KanbanApiClient:
             "section-not-found": McpErrorCode.SECTION_NOT_FOUND,
             "already-promoted": McpErrorCode.ALREADY_PROMOTED,
             "link-type-not-allowed": McpErrorCode.LINK_TYPE_NOT_ALLOWED,
-            "cross-scope-taint": McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED,
             "mention-access-warning": McpErrorCode.MENTION_ACCESS_WARNING,
             "creator-not-eligible": McpErrorCode.CREATOR_NOT_ELIGIBLE,
             "link-not-flagged": McpErrorCode.LINK_NOT_FLAGGED,

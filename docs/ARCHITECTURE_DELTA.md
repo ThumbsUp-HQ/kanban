@@ -26,7 +26,7 @@ Overall Implementation Status:
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Section 1** | Mission & Enterprise SaaS Paywall Gap Analysis | Root `LICENSE`, `pyproject.toml`, `package.json` | **COMPLETE (100%)** | **VERIFIED** | Pure Apache-2.0 compliance, zero AGPL/GPL/SSPL runtime dependencies. |
 | **Section 2** | System Topology & Container Architecture | `Dockerfile`, `docker-compose.yml`, `deploy/` | **COMPLETE (100%)** | **VERIFIED** | Embedded PG16 Unix socket in standalone mode; sandbox target in Dockerfile; 5 isolated networks in production. |
-| **Section 3** | Zero-Trust Security & Sharing Visibility | `database/models/principals.py`, `mcp_read_taint.py` | **COMPLETE (100%)** | **VERIFIED** | PostgreSQL FORCE RLS active on 100% of tenant tables; read-taint high-water mark enforced. |
+| **Section 3** | Zero-Trust Security & Sharing Visibility | `database/models/principals.py`, `database/models/mcp_api_key.py` | **COMPLETE (100%)** | **VERIFIED** | PostgreSQL FORCE RLS active on 100% of tenant tables; CredentialBoundary key scoping enforced. |
 | **Section 4** | Multi-Card Pluggable Authentication Studio | `database/models/auth.py`, `kanban/auth/` | **COMPLETE (100%)** | **VERIFIED** | OIDC, LDAP, WebAuthn, TOTP, Local Admin. USER/GROUP/AGENT principal support in Auth Studio. |
 | **Section 5** | Canonical Markdown Pipeline & Safe Media | `kanban/content/`, `kanban/media_proxy/` | **COMPLETE (100%)** | **VERIFIED** | UTF-16 surrogate rejection, hidden-DOM pruner, beautiful-mermaid Web Worker, SVG sandbox. |
 | **Section 6** | Breathable Enterprise Whitespace & Board | `kanban/web/src/styles/tokens.css`, `features/board/` | **COMPLETE (100%)** | **VERIFIED** | 21-emoji `<EmojiHint>` system, 5 native views, 2D swimlanes, sub-16ms DnD. |
@@ -90,11 +90,11 @@ Overall Implementation Status:
   - Hybrid RBAC + Resource ACLs + Agent On-Behalf-Of (OBO) intersection: `EffectivePerms = (InheritedRBAC ∪ DirectAllowACL) \ EffectiveDenyACL`. For agents: `Principal ∩ KeyScope ∩ AgentGrant`.
   - PostgreSQL `FORCE ROW LEVEL SECURITY`: enabled and forced across 100% of tenant tables (`database/migrations/versions/p1_14_force_rls.py`); `kanban_app` user has `NOBYPASSRLS`. Session parameters bound via `SET LOCAL app.principal_id`, `app.workspace_id`, `app.token_scopes`, `app.aal_level`.
   - Anti-enumeration `access_manifest`: same-workspace co-viewers visible, external/restricted principals redacted, unreadable objects return uniform RFC 7807 404 with 25ms timing floor. Compact `🛡️` sharing pill.
-  - STRIDE threat matrix & Session Read-Taint High-Water Mark: `mcp_read_taint` model, prevents prompt-injection exfiltration across projects (`CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED`, `MCP_TAINT_BLOCKED`).
+  - STRIDE threat matrix & Explicit Key Scoping: CredentialBoundary model, prevents prompt-injection exfiltration across projects via PostgreSQL FORCE RLS (`app_credential_workspaces()`, `app_credential_projects()`).
 - **Implementation Evidence:**
-  - Database models: `database/models/principals.py`, `database/models/mcp_read_taint.py`.
+  - Database models: `database/models/principals.py`, `database/models/mcp_api_key.py`.
   - Migration: `database/migrations/versions/p1_14_force_rls.py`.
-  - Backend services: `kanban/security/permissions.py`, `kanban/security/read_taint.py`, `kanban/api/timing.py`.
+  - Backend services: `kanban/security/permissions.py`, `kanban/security/boundary.py`, `kanban/api/timing.py`.
   - Frontend components: `kanban/web/src/features/drawer/AccessPill.tsx`, `AccessInspectorModal.tsx`, `EmojiHint.tsx`.
 - **Verification Evidence:**
   - Test suites: `database/tests/test_p1_14_rls_policies.py`, `database/tests/test_p1_14_rls_catalog.py`, `tests/security/test_stride_prompt_injection.py`, `kanban/tests/security/test_anti_enumeration.py`.

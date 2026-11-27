@@ -23,7 +23,6 @@ from kanban.issues.lease_service import (
 from kanban.issues.workflow_service import begin_work, complete_work, transition_ticket
 from kanban.security.permissions import Capability, require_capability
 from kanban.security.ratelimit import ISSUE_WORKFLOW_RATE_LIMIT, rate_limited
-from kanban.security.read_taint import TaintGuard, get_taint_guard
 from kanban.services import issues as svc
 
 router = APIRouter(tags=["issue-workflow"])
@@ -87,12 +86,11 @@ class LeaseHeartbeatRequest(BaseModel):
     summary="Atomically assign caller, attach active cycle, move to started state, and post plan",
     dependencies=[Depends(rate_limited(ISSUE_WORKFLOW_RATE_LIMIT, key_func=_principal_rate_key))],
 )
-async def api_begin_work(  # noqa: PLR0913, PLR0917
+async def api_begin_work(
     issue_key: str,
     body: BeginWorkRequest,
     caller: Caller,
     session: Session,
-    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
     """Initiate work on an issue in a single atomic transaction.
@@ -100,8 +98,7 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
     Moves workflow state, assigns caller as assignee, and records execution plan.
     """
     async with timing_floor(floor_ms=25.0):
-        pre_issue = await svc.get_issue_or_404(session, caller, issue_key)
-        await taint_guard.check_write(pre_issue.project_id, tool_name="begin_work")
+        await svc.get_issue_or_404(session, caller, issue_key)
         issue, from_state, started_state, comment_ref, gate_hold, lease = await begin_work(
             session,
             caller,
@@ -165,18 +162,16 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
     summary="Transition issue to intermediate workflow state",
     dependencies=[Depends(rate_limited(ISSUE_WORKFLOW_RATE_LIMIT, key_func=_principal_rate_key))],
 )
-async def api_transition_ticket(  # noqa: PLR0913, PLR0917
+async def api_transition_ticket(
     issue_key: str,
     body: TransitionTicketRequest,
     caller: Caller,
     session: Session,
-    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
     """Transition an issue state under concurrency and gate hook evaluation."""
     async with timing_floor(floor_ms=25.0):
-        pre_issue = await svc.get_issue_or_404(session, caller, issue_key)
-        await taint_guard.check_write(pre_issue.project_id, tool_name="transition_ticket")
+        await svc.get_issue_or_404(session, caller, issue_key)
         issue, from_state, target_state, gate_hold = await transition_ticket(
             session,
             caller,
@@ -234,18 +229,16 @@ async def api_transition_ticket(  # noqa: PLR0913, PLR0917
     summary="Verify blockers and QA gate, transition to completed, and log proof",
     dependencies=[Depends(rate_limited(ISSUE_WORKFLOW_RATE_LIMIT, key_func=_principal_rate_key))],
 )
-async def api_complete_work(  # noqa: PLR0913, PLR0917
+async def api_complete_work(
     issue_key: str,
     body: CompleteWorkRequest,
     caller: Caller,
     session: Session,
-    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
     """Verify preconditions, complete issue workflow, and record WORK_COMPLETED activity."""
     async with timing_floor(floor_ms=25.0):
-        pre_issue = await svc.get_issue_or_404(session, caller, issue_key)
-        await taint_guard.check_write(pre_issue.project_id, tool_name="complete_work")
+        await svc.get_issue_or_404(session, caller, issue_key)
         issue, from_state, target_state, proof, comment_ref, gate_hold = await complete_work(
             session,
             caller,
@@ -310,12 +303,10 @@ async def api_lease_heartbeat(
     body: LeaseHeartbeatRequest,
     caller: Caller,
     session: Session,
-    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
 ) -> JSONResponse:
     """Heartbeat and extend lease TTL on an actively leased issue."""
     async with timing_floor(floor_ms=25.0):
-        pre_issue = await svc.get_issue_or_404(session, caller, issue_key)
-        await taint_guard.check_write(pre_issue.project_id, tool_name="lease_heartbeat")
+        await svc.get_issue_or_404(session, caller, issue_key)
         lease = await heartbeat_issue_lease(
             session,
             caller,
@@ -345,13 +336,11 @@ async def api_release_lease(
     issue_key: str,
     caller: Caller,
     session: Session,
-    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     fencing_token: int | None = None,
 ) -> JSONResponse:
     """Release active issue claim lease."""
     async with timing_floor(floor_ms=25.0):
-        pre_issue = await svc.get_issue_or_404(session, caller, issue_key)
-        await taint_guard.check_write(pre_issue.project_id, tool_name="release_lease")
+        await svc.get_issue_or_404(session, caller, issue_key)
         released = await release_issue_lease(
             session,
             caller,

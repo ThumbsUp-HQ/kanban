@@ -1,0 +1,156 @@
+diff --git a/Architecture-Delta-and-Missing-Features.md b/Architecture-Delta-and-Missing-Features.md
+index e03d514..bd25bf9 100644
+--- a/Architecture-Delta-and-Missing-Features.md
++++ b/Architecture-Delta-and-Missing-Features.md
+@@ -72,7 +72,7 @@ Visual verification of the MCP Access Studio and token LOD tiers (`summary`, `st
+ | :--- | :--- | :--- | :--- | :--- | :--- |
+ | **Section 1** | Mission & Enterprise SaaS Paywall Gap Analysis | Root `LICENSE`, `pyproject.toml`, `package.json` | **COMPLETE (100%)** | **VERIFIED** | Pure Apache-2.0 compliance, zero AGPL/GPL/SSPL runtime dependencies. |
+ | **Section 2** | System Topology & Container Architecture | `Dockerfile`, `docker-compose.yml`, `deploy/` | **COMPLETE (100%)** | **VERIFIED** | Embedded PG16 Unix socket in standalone mode; sandbox target in Dockerfile; 5 isolated networks in production. |
+-| **Section 3** | Zero-Trust Security & Sharing Visibility | `database/models/principals.py`, `mcp_read_taint.py` | **COMPLETE (100%)** | **VERIFIED** | PostgreSQL FORCE RLS active on 100% of tenant tables; read-taint high-water mark enforced. |
++| **Section 3** | Zero-Trust Security & Sharing Visibility | `database/models/principals.py` | **COMPLETE (100%)** | **VERIFIED** | PostgreSQL FORCE RLS active on 100% of tenant tables; explicit CredentialBoundary key-scoping enforced. |
+ | **Section 4** | Multi-Card Pluggable Authentication Studio | `database/models/auth.py`, `kanban/auth/` | **COMPLETE (100%)** | **VERIFIED** | OIDC, LDAP, WebAuthn, TOTP, Local Admin. USER/GROUP/AGENT principal support in Auth Studio. |
+ | **Section 5** | Canonical Markdown Pipeline & Safe Media | `kanban/content/`, `kanban/media_proxy/` | **COMPLETE (100%)** | **VERIFIED** | UTF-16 surrogate rejection, hidden-DOM pruner, beautiful-mermaid Web Worker, SVG sandbox. |
+ | **Section 6** | Breathable Enterprise Whitespace & Board | `kanban/web/src/styles/tokens.css`, `features/board/` | **COMPLETE (100%)** | **VERIFIED** | 21-emoji `<EmojiHint>` system, 5 native views, 2D swimlanes, sub-16ms DnD. |
+@@ -133,14 +133,14 @@ Visual verification of the MCP Access Studio and token LOD tiers (`summary`, `st
+   - Hybrid RBAC + Resource ACLs + Agent On-Behalf-Of (OBO) intersection: `EffectivePerms = (InheritedRBAC ∪ DirectAllowACL) \ EffectiveDenyACL`. For agents: `Principal ∩ KeyScope ∩ AgentGrant`.
+   - PostgreSQL `FORCE ROW LEVEL SECURITY`: enabled and forced across 100% of tenant tables (`database/migrations/versions/p1_14_force_rls.py`); `kanban_app` user has `NOBYPASSRLS`. Session parameters bound via `SET LOCAL app.principal_id`, `app.workspace_id`, `app.token_scopes`, `app.aal_level`.
+   - Anti-enumeration `access_manifest`: same-workspace co-viewers visible, external/restricted principals redacted, unreadable objects return uniform RFC 7807 404 with 25ms timing floor. Compact `🛡️` sharing pill.
+-  - STRIDE threat matrix & Session Read-Taint High-Water Mark: `mcp_read_taint` model, prevents prompt-injection exfiltration across projects (`CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED`, `MCP_TAINT_BLOCKED`).
++  - STRIDE threat matrix & Explicit CredentialBoundary Key Scoping: project-scoped keys enforced at both MCP dispatch and PostgreSQL `FORCE RLS` row level.
+ - **Implementation Evidence:**
+-  - Database models: `database/models/principals.py`, `database/models/mcp_read_taint.py`.
+-  - Migration: `database/migrations/versions/p1_14_force_rls.py`.
+-  - Backend services: `kanban/security/permissions.py`, `kanban/security/read_taint.py`, `kanban/api/timing.py`.
++  - Database models: `database/models/principals.py`.
++  - Migration: `database/migrations/versions/p1_14_force_rls.py`, `database/migrations/versions/p6_25_drop_mcp_read_taint.py`.
++  - Backend services: `kanban/security/permissions.py`, `kanban/security/boundary.py`, `kanban/api/timing.py`.
+   - Frontend components: `kanban/web/src/features/drawer/AccessPill.tsx`, `AccessInspectorModal.tsx`, `EmojiHint.tsx`.
+ - **Verification Evidence:**
+-  - Test suites: `database/tests/test_p1_14_rls_policies.py`, `database/tests/test_p1_14_rls_catalog.py`, `tests/security/test_stride_prompt_injection.py`, `kanban/tests/security/test_anti_enumeration.py`.
++  - Test suites: `database/tests/test_p1_14_rls_policies.py`, `database/tests/test_p1_14_rls_catalog.py`, `kanban/tests/security/test_scoped_key_no_read_taint.py`, `kanban/tests/security/test_anti_enumeration.py`.
+ - **Status:** Fully Implemented and Verified.
+ - **Architectural Drift:** None.
+ - **Gaps & Recommendations:** Maintain continuous verification of RLS policies when creating new tenant-bearing tables.
+diff --git a/Feature-Comparison.md b/Feature-Comparison.md
+index abddfd9..c9aeed5 100644
+--- a/Feature-Comparison.md
++++ b/Feature-Comparison.md
+@@ -104,7 +104,7 @@ Jira splits Docs and Stickies into separate paid Confluence and Whiteboard licen
+ | Deterministic JSON/Unix CLI | ✅ | 🆓🔌 | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
+ | Native CFD, Lead & Aging WIP | ✅ | 🔐 | 💰 | 🔐 | ❌ | ❌ | ✅ | 🔐 |
+ 
+-OpenAI Symphony tracks single-daemon claims in volatile memory (`🔐`) and relies on external `WORKFLOW.md` comment scraping (`🆓🔌`) with no Unix board CLI (`❌`), while GitHub gates private-repo secret push-protection (`🔐`), Businessmap leads on native Lean flow analytics (`✅`), and Codebeamer enforces ALM commit/release traceability (`✅`). **`👍kanban`** ships all ten Day-2 enterprise and fleet-scale capabilities directly in its free `Apache-2.0` core (`✅`): `Atomic Agent Lease & Fencing` via PostgreSQL `issue_leases` and monotonic `fencing_token` CAS; `Prompt-Injection Taint Gate` via per-block provenance tainting and dynamic MCP capability stripping; `Dedicated Agent Workpad Slot` via silent per-issue `issue_workpads` and rework-loop circuit breakers; `Pre-Write Secret Redaction` via synchronous pre-persistence Shannon-entropy secret push-protection; `Crypto-Shredded Audit Chain` via envelope-encrypted `activity_record_keys`; `Ephemeral OIDC Agent Auth` via RFC 8693 headless workload OIDC token exchange; `Git Worktree / PR & Sig Gate` via SSRF-hardened SCM webhooks and `SSH`/`GPG`/`Sigstore` & SLSA attestation gates; `Lossless Import & Full Export` via Jira/GitHub/Linear/Plane importers with legacy key-alias redirects, CSV/AES-256 ZIP export, and deterministic `JSONL` + `.md` archives; `Deterministic JSON/Unix CLI` via schema-driven `kanban-ctl` and `kanban-cli --filter ... --json` with `hnsw.iterative_scan` RLS vector recall; and `Native CFD, Lead & Aging WIP` via native CFD, Aging WIP, Cycle/Lead Time `p50`/`p85`/`p95` scatterplots, 10,000-iteration Monte Carlo forecasting, and Jinja2 multi-format compliance reporting.
++OpenAI Symphony tracks single-daemon claims in volatile memory (`🔐`) and relies on external `WORKFLOW.md` comment scraping (`🆓🔌`) with no Unix board CLI (`❌`), while GitHub gates private-repo secret push-protection (`🔐`), Businessmap leads on native Lean flow analytics (`✅`), and Codebeamer enforces ALM commit/release traceability (`✅`). **`👍kanban`** ships all ten Day-2 enterprise and fleet-scale capabilities directly in its free `Apache-2.0` core (`✅`): `Atomic Agent Lease & Fencing` via PostgreSQL `issue_leases` and monotonic `fencing_token` CAS; `Prompt-Injection Taint Gate` via per-block provenance flags and explicit CredentialBoundary key-scoping; `Dedicated Agent Workpad Slot` via silent per-issue `issue_workpads` and rework-loop circuit breakers; `Pre-Write Secret Redaction` via synchronous pre-persistence Shannon-entropy secret push-protection; `Crypto-Shredded Audit Chain` via envelope-encrypted `activity_record_keys`; `Ephemeral OIDC Agent Auth` via RFC 8693 headless workload OIDC token exchange; `Git Worktree / PR & Sig Gate` via SSRF-hardened SCM webhooks and `SSH`/`GPG`/`Sigstore` & SLSA attestation gates; `Lossless Import & Full Export` via Jira/GitHub/Linear/Plane importers with legacy key-alias redirects, CSV/AES-256 ZIP export, and deterministic `JSONL` + `.md` archives; `Deterministic JSON/Unix CLI` via schema-driven `kanban-ctl` and `kanban-cli --filter ... --json` with `hnsw.iterative_scan` RLS vector recall; and `Native CFD, Lead & Aging WIP` via native CFD, Aging WIP, Cycle/Lead Time `p50`/`p85`/`p95` scatterplots, 10,000-iteration Monte Carlo forecasting, and Jinja2 multi-format compliance reporting.
+ 
+ ---
+ 
+diff --git a/Security-and-STRIDE-Threat-Matrix.md b/Security-and-STRIDE-Threat-Matrix.md
+index 421c430..0685482 100644
+--- a/Security-and-STRIDE-Threat-Matrix.md
++++ b/Security-and-STRIDE-Threat-Matrix.md
+@@ -135,7 +135,7 @@ flowchart TD
+ | **A1** | **Root Cryptographic Keyring**<br/>`kanban/security/envelope.py`<br/>`kanban/security/service_auth.py`<br/>`kanban/settings.py` | Critical System Secret | `MASTER_KEK` / `KB_MASTER_KEK_B64` loaded from env or `0600` keyring file. HKDF-SHA256 derivation for subkeys (`kanban/internal-service-auth/v1`, `media-proxy/url`). `KB_AUTH_PEPPER` for Argon2id. | Ephemeral in-process memory. Key rotation supported via key versioning (`kid`). Backup encryption keys (`KBBAK1`) separate. | Compromise of KEK allows offline decryption of wrapped DEKs; mitigated by HSM/KMS envelope wrapping, zero disk persistence of plaintext DEKs, and separate HMAC peppers. |
+ | **A2** | **Envelope-Encrypted Tenant Secrets**<br/>`kanban/security/envelope.py`<br/>`database/models/auth.py` | High Tenant Secret | AES-256-GCM authenticated encryption per record using unique Data Encryption Keys (DEKs) wrapped by `MASTER_KEK`. Protects OAuth client secrets, LDAP bind passwords, AI provider keys, mTLS enrollment tokens, and webhook secrets. | Re-encrypted on key rotation. Instant crypto-shredding upon tenant workspace deletion by destroying record DEKs. | Compromise of a single DEK exposes only that specific secret record; adjacent tenant records remain encrypted under independent DEKs. |
+ | **A3** | **User Authentication & AAL2 Credentials**<br/>`database/models/auth.py`<br/>`kanban/auth/guards.py`<br/>`kanban/auth/mfa/` | High Identity Asset | Passwords hashed with Argon2id (`m=64MiB`, `t=3`, `p=4`) plus server pepper. WebAuthn Passkeys with hardware COSE public keys and monotonic signature counters (`rp.name = "👍kanban"`, strict ASCII FQDN `rp.id`). TOTP seeds encrypted under AES-256-GCM. OAuth 2.1 authorization codes (S256 PKCE). | Sessions expire on idle timeout or explicit logout. AAL2 elevation valid for max 900 seconds (`ADMIN_AAL2_MAX_AGE_SECONDS`). Recovery codes single-use hashed. | Account takeover bounded by mandatory AAL2 for all `/api/v1/admin/*` routes; stolen password cannot execute administrative actions without second factor. |
+-| **A4** | **Scoped MCP API Keys & Ephemeral Tokens**<br/>`database/models/mcp_api_key.py`<br/>`kanban/security/boundary.py`<br/>`kanban/security/read_taint.py` | High Delegated Credential | Tokens hashed with SHA-256 (`token_hash`). Monotonic `Capability(IntFlag)` bitmask ceiling (0x01..0xFF), `SCOPE_CAPABILITY_MAP`, allowed project scope, tool allowlists, and optional `allowed_cidrs`. Session high-water mark `mcp_read_taint`. | Short-lived ephemeral tokens (TTL <= 15m) tied to specific execution ID; instant revocation via `revoke_ephemeral_tokens_by_execution`. | Monotonic clamp ensures leaked token cannot exceed caller authority or configured CIDR/tool boundaries; read-taint blocks cross-project exfiltration. |
++| **A4** | **Scoped MCP API Keys & Ephemeral Tokens**<br/>`database/models/mcp_api_key.py`<br/>`kanban/security/boundary.py` | High Delegated Credential | Tokens hashed with SHA-256 (`token_hash`). Monotonic `Capability(IntFlag)` bitmask ceiling (0x01..0xFF), `SCOPE_CAPABILITY_MAP`, allowed project scope, tool allowlists, and optional `allowed_cidrs`. PostgreSQL `FORCE RLS` key-scoping (`app_credential_projects()`). | Short-lived ephemeral tokens (TTL <= 15m) tied to specific execution ID; instant revocation via `revoke_ephemeral_tokens_by_execution`. | Monotonic clamp ensures leaked token cannot exceed caller authority or configured CIDR/tool boundaries; explicit key scoping blocks cross-project exfiltration. |
+ | **A5** | **Universal Object Graph & Tenant Content**<br/>`database/models/` (80 ORM models)<br/>`kanban/attachments/pdf.py`<br/>`kanban/security/push_protection.py` | Confidential Tenant Asset | Canonical UTF-8 Markdown only. Strict lone-surrogate rejection (`INVALID_UTF8_SURROGATE`). Pre-persistence Shannon-entropy secret push protection (`KAN-72`). Quarantined CAS attachment storage. Subprocess active-content PDF sanitizer (`KAN-81`). Lease concurrency fencing (`KAN-69`). | Soft-delete with tombstoning followed by cryptographic purge via Invalid Object Link Auditor. Workload OIDC federation (`KAN-74`). DNS-pinned SSRF transport (`KAN-75`). | Cross-tenant bleed prevented by 100% PostgreSQL `FORCE ROW LEVEL SECURITY`. Anti-enumeration timing floors (25ms) normalize unreadable vs non-existent objects. |
+ | **A6** | **Authorization Graph & Forensic Audit Ledger**<br/>`database/models/audit_ledger.py`<br/>`database/session.py`<br/>`kanban/security/audit_crypto_shred.py` | Integrity & Compliance Asset | PostgreSQL Row-Level Security policies (`FORCE RLS`, `NOBYPASSRLS`). Effective Resource Access (`ERA`) cache. Append-only `audit_ledger` and `activity` streams with cryptographic event hashing and tenant-scoped crypto-shredding keys (`KAN-73`). | Immutable append-only ledger. Right-to-be-forgotten / GDPR compliance implemented via targeted DEK shredding without breaking blockchain-like hash continuity. | Unauthorized log modification prevented by immutable database triggers and append-only constraints; attribution guaranteed by cryptographic principal binding. |
+ 
+@@ -189,7 +189,7 @@ flowchart TD
+ - **Security Invariants:**
+   - `McpAuthMiddleware`: Validates Bearer API keys and ephemeral tokens via internal introspection.
+   - `CredentialBoundary`: Clamps tool availability and data access to key capability mask and allowed projects.
+-  - `mcp_read_taint`: Tracks high-water mark of accessed audience scopes; halts write attempts to broader audiences with `CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED`.
++  - `CredentialBoundary`: Enforces explicit project, workspace, and global key scopes natively at both MCP dispatch and database row level via PostgreSQL `FORCE ROW LEVEL SECURITY`.
+ 
+ ### E6 - Sandboxes & Agent Harnesses
+ - **Code & Config:** `kanban/sandbox/`, `agent/harnesses/`, `kanban/attachments/pdf.py`
+@@ -232,7 +232,7 @@ flowchart TD
+ | **Tampering** | Committing cleartext secrets into tickets or stickies | A1, A2 / E2, E5 | Pre-persistence Shannon-entropy push protection (`KAN-72`) scanning all incoming Markdown for high-entropy tokens and API keys prior to database write. | `kanban/tests/security/test_push_protection.py` |
+ | **Repudiation** | Denying ticket modifications or deletion | A6 / E2, E5 | Append-only immutable `audit_ledger` and `activity` streams recording actor principal ID, event type, timestamp, and object links with cryptographic hash chaining. | `kanban/tests/security/test_audit_crypto_shred.py` |
+ | **Information Disclosure** | Cross-tenant data leakage via ID enumeration | A5 / E2 | Uniform RFC 7807 404 Not Found responses for both unauthorized and non-existent entities. Synthetic 25ms timing floors (`timing_floor`) neutralizing timing side-channels. | `kanban/tests/api/test_anti_enumeration.py` |
+-| **Information Disclosure** | Autonomous agent reading private docs and leaking to public tickets | A4, A5 / E5 (`/mcp/agent`) | MCP Read-Taint High-Water Mark (`mcp_read_taint`): accumulates audience principals during reads; blocks write attempts to broader audiences with `CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED`. | `kanban/tests/security/test_read_taint.py` |
++| **Information Disclosure** | Autonomous agent reading private docs and leaking to public tickets | A4, A5 / E5 (`/mcp/agent`) | Explicit CredentialBoundary Key Scoping: project-scoped keys restricted at both MCP dispatch and PostgreSQL `FORCE RLS` row level. | `kanban/tests/security/test_scoped_key_no_read_taint.py` |
+ | **Information Disclosure** | Outbound AI provider prompts leaking internal secrets | A1, A2 / E6 (`egress_llm_net`) | `OutboundSecretScrubber` scans all payloads leaving the application boundary, redacting API keys, session HMACs, and private PEM blocks. | `kanban/tests/security/test_scrubber.py` |
+ | **Denial of Service** | Billion-laughs XML attacks or decompression bombs | A5 / E7 (Attachments, PDF) | SVG parser enforces maximum DAG depth <= 5 and max 500 expanded nodes. PDF active-content analyzer caps file size at 25 MiB, Flate expansion ratio at 100x, and decompressed bytes at 100 MiB. | `kanban/tests/attachments/test_pdf.py` |
+ | **Denial of Service** | WebSocket connection exhaustion or token starvation | A4 / E4 (`/ws`) | Client connection limits (max 16 concurrent WebSockets per user), 64 KiB frame size caps, client IP rate limiting, and token budget enforcers. | `kanban/tests/realtime/test_ws_limits.py` |
+diff --git a/User-Tasks-and-QA-Matrix.md b/User-Tasks-and-QA-Matrix.md
+index a40f7fd..81a90f3 100644
+--- a/User-Tasks-and-QA-Matrix.md
++++ b/User-Tasks-and-QA-Matrix.md
+@@ -35,7 +35,7 @@ flowchart TD
+ | **Browser QA & Screenshot Bot 1: Core Board, Views & Ticket Drawer** | `flash` | **S6** (Board, Whitespace, `<EmojiHint>`), **S7** (17-Feature Ticket Screen, `?peek=` Drawer, Rail, 4-Tab Activity) | Live `/browser` human walkthrough of Workspace Home, Board, List (3-pane split), Table, Calendar, Timeline, Quick-Create (`C`), and Ticket Drawer (`?peek=`). Captures annotated screenshots into `thumbs-up-kanban.wiki/images/`. |
+ | **Browser QA & Screenshot Bot 2: Docs, Stickies, Editor & Sparkle (`✨`)** | `flash` | **S5** (Canonical Markdown, Mermaid, SVG), **S8** (Hierarchical Docs & Stickies Promotion), **S9** (Sparkle FIM Completion & Right-Click Accept) | Live `/browser` human walkthrough of Workspace/Project Stickies, Sticky-to-Doc AI Promotion modal, Docs ltree tree & outline, Editor Markdown/Mermaid rendering, and Sparkle (`✨`) ghost-text completion. Captures screenshots into `thumbs-up-kanban.wiki/images/`. |
+ | **Browser QA & Screenshot Bot 3: Auth, Security, MCP & Workflow Studios** | `flash` | **S2** (Standalone Status Panel), **S4** (Multi-Card Auth Studio & `/setup`), **S11** (MCP Access & Scopable Keys Studio), **S13** (Custom Fields Studio), **S14** (Workflow Transition Studio & Dry-Run Drawer) | Live `/browser` human walkthrough of `/setup`, `/login`, `/admin/auth`, `/admin/mcp`, `/projects/KAN/settings/workflows`, `/projects/KAN/settings/custom-fields`, and `/admin/standalone`. Captures screenshots into `thumbs-up-kanban.wiki/images/`. |
+-| **MCP Tools JSON vs. Expectation Evaluator Bot** | `flash` | **S11** (3-Surface MCP Server: `/mcp/agent`, `/mcp/docs`, `/mcp/admin`), **S3.5** (Read-Taint Guard), **S14** (Admin Tool 8 & 9) | Audits all 24 live MCP tool JSON schemas (`/tmp/mcp_tools_actual.json`) against Spec S11 expectations for parameter clarity, `EntityResolver` human keys, `lod` tiers, 2-stage destructive confirmations, and LLM ergonomics. Produces `thumbs-up-kanban.wiki/MCP-Tools-Usability-Audit.md`. |
++| **MCP Tools JSON vs. Expectation Evaluator Bot** | `flash` | **S11** (3-Surface MCP Server: `/mcp/agent`, `/mcp/docs`, `/mcp/admin`), **S3.5** (Explicit Key Scoping), **S14** (Admin Tool 8 & 9) | Audits all 24 live MCP tool JSON schemas (`/tmp/mcp_tools_actual.json`) against Spec S11 expectations for parameter clarity, `EntityResolver` human keys, `lod` tiers, 2-stage destructive confirmations, and LLM ergonomics. Produces `thumbs-up-kanban.wiki/MCP-Tools-Usability-Audit.md`. |
+ | **Wiki Documentation Architect & Author** | `flash` / Coordinator | **S1-S15** (Full System Coverage + OpenAPI 242-Route Reference + MCP 24-Tool Reference) | Authors complete 10-page Wiki in `thumbs-up-kanban.wiki/` with `_Sidebar.md`, `_Footer.md`, embedded screenshots, Mermaid diagrams, REST OpenAPI reference, MCP catalog, and CLI runbooks. |
+ | **Carbon Architecture-vs-Docs Delta Auditor** | `pro` (Carbon) | **S1-S15** Cross-Layer Forensic Delta Audit | Compares `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` and actual codebase against all Wiki topics, browser QA findings, and API/MCP schemas to identify missing features, incomplete items, and actionable backlog tickets. |
+ 
+diff --git a/Zero-Trust-Security-and-Access-Visibility.md b/Zero-Trust-Security-and-Access-Visibility.md
+index 8de3073..0eba5df 100644
+--- a/Zero-Trust-Security-and-Access-Visibility.md
++++ b/Zero-Trust-Security-and-Access-Visibility.md
+@@ -9,7 +9,7 @@ Key security pillars:
+ 2. **Zero-Context Fail-Closed Execution:** Unbound database sessions return zero rows.
+ 3. **Explicit Access Visibility:** Every ticket, doc, and sticky renders an explicit sharing manifest with zero cross-tenant enumeration.
+ 4. **Agent On-Behalf-Of (OBO) Key Scoping:** Agent permissions are computed strictly as the mathematical intersection of the calling user's permissions and the API key's scope.
+-5. **MCP Read-Taint High-Water Mark Defense:** Prevents autonomous agents from exfiltrating sensitive data read from higher-privilege scopes into lower-privilege write targets.
++5. **Explicit CredentialBoundary Key Scoping Defense:** Enforces strict project, workspace, and global boundaries via PostgreSQL FORCE RLS and MCP pre-dispatch tool clamping.
+ 
+ ---
+ 
+@@ -121,33 +121,35 @@ To prevent malicious actors from scanning IDs or usernames:
+ 
+ ---
+ 
+-## MCP Read-Taint High-Water Mark Defense
++## Explicit CredentialBoundary Key Scoping Defense
+ 
+-Autonomous LLMs can be tricked by prompt injection into reading confidential documents and writing excerpts into public tickets. 👍kanban prevents this through **Read-Taint Tracking**:
++Autonomous LLMs require deterministic, unbypassable boundary enforcement rather than fragile stateful session tracking. 👍kanban guarantees boundary isolation through **Explicit CredentialBoundary Key Scoping**:
+ 
+ ```mermaid
+ sequenceDiagram
+     autonumber
+     actor Agent as Autonomous Agent
+-    participant Gateway as MCP Gateway Taint Engine
+-    participant PrivateDoc as Confidential Doc (Tier: PRIVATE)
+-    participant PublicTicket as Public Ticket (Tier: PUBLIC)
+-
+-    Agent->>Gateway: read_doc(id='confidential_spec')
+-    Gateway->>PrivateDoc: Fetch Document
+-    PrivateDoc-->>Gateway: Return Content
+-    Gateway->>Gateway: Elevate Agent Session High-Water Mark to PRIVATE
+-    Gateway-->>Agent: Deliver Markdown Payload
+-
+-    Note over Agent: Later in conversation...
+-    Agent->>Gateway: update_ticket(id='public_bug', body=...)
+-    Gateway->>Gateway: Check Destination Scope (PUBLIC) vs High-Water Mark (PRIVATE)
+-    Gateway-->>Agent: 403 Forbidden (CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED)
++    participant Gateway as MCP Gateway
++    participant DB as PostgreSQL (FORCE RLS)
++    participant ProjA as Project A (Allowed Scope)
++    participant ProjB as Project B (Restricted Scope)
++
++    Note over Agent,Gateway: API Key Scoped to Project A (kb_agt_*)
++    Agent->>Gateway: read_ticket(key='PROJ-A-1')
++    Gateway->>DB: Query Ticket (RLSContext credential_boundary)
++    DB-->>Gateway: Row Verified & Delivered (HTTP 200)
++    Gateway-->>Agent: Ticket Markdown Delivered
++
++    Note over Agent: Agent attempts cross-project inspection
++    Agent->>Gateway: read_ticket(key='PROJ-B-1')
++    Gateway->>DB: Query Ticket (RLSContext credential_boundary)
++    DB-->>Gateway: RLS Filters Out Row (Zero Rows / 404 Not Found)
++    Gateway-->>Agent: 404 Not Found (Entity Not Visible)
+ ```
+ 
+ ![Agent Kill Switch and Immediate Session Revocation](images/18-agent-kill-switch.png)
+ 
+-When an agent reads a resource with an elevated confidentiality label, its session high-water mark increases. Any subsequent write operation to a lower-privilege target is halted immediately with an error requiring human operator confirmation.
++Every MCP key declares an explicit boundary tier (`project`, `workspace`, or `global`) and an allowed capability bitmask. The backend passes `credential_boundary` directly into the database session via `RLSContext`, ensuring PostgreSQL `FORCE ROW LEVEL SECURITY` kernel policies (`app_credential_workspaces()`, `app_credential_projects()`) filter rows natively without stateful taint session tracking.
+ 
+ ---
+ 

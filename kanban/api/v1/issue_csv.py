@@ -44,7 +44,6 @@ from kanban.csv.issue_csv import (
     process_issue_import,
 )
 from kanban.security.permissions import Capability, require_capability
-from kanban.security.read_taint import TaintRecorder, get_taint_recorder
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.projects import get_project_or_404
 from kanban.settings import get_settings
@@ -437,7 +436,6 @@ async def export_project_issues(
     req: IssueExportRequest,
     caller: Caller,
     session: Session,
-    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
 ) -> Response:
     """Export project issues matching filters to CSV or Password-protected ZIP (AES-256)."""
     async with timing_floor(floor_ms=25.0):
@@ -445,7 +443,6 @@ async def export_project_issues(
         await _check_export_governance(session, caller, project.workspace_id, project.id)
 
         rows = await _execute_export_query(session, caller, project.id, req)
-        await taint_recorder.record_project_ids([project.id])
 
         csv_content = export_issues_to_csv(rows)
 
@@ -508,7 +505,6 @@ async def export_workspace_issues(
     req: IssueExportRequest,
     caller: Caller,
     session: Session,
-    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
 ) -> Response:
     """Export workspace issues matching filters to CSV or Password-protected ZIP (AES-256)."""
     async with timing_floor(floor_ms=25.0):
@@ -532,10 +528,6 @@ async def export_workspace_issues(
         await _check_export_governance(session, caller, ws_id)
 
         rows = await _execute_export_query(session, caller, None, req)
-
-        pids = {r["project_key"] for r in rows if r.get("project_key")}
-        if pids:
-            await taint_recorder.record_project_ids(pids)
 
         csv_content = export_issues_to_csv(rows)
 

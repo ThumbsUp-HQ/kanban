@@ -89,28 +89,6 @@ export const ERROR_HELP_CATALOG: Record<string, ErrorHelpEntry> = {
     docHref: '/docs/three-surface-mcp-server-architecture#scope-tiers',
     isAal2StepUp: false,
   },
-  CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED: {
-    code: 'CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED',
-    title: 'Cross-Scope Read-Taint Guard',
-    summary:
-      'Session read-taint guard requires explicit confirmation before writing across project boundaries.',
-    remediation:
-      'Acknowledge the cross-scope data flow or clear session read-taint high water mark before retrying.',
-    docHref:
-      '/docs/zero-trust-security-and-access-visibility#read-taint-high-water-mark',
-    isAal2StepUp: false,
-  },
-  MCP_TAINT_BLOCKED: {
-    code: 'MCP_TAINT_BLOCKED',
-    title: 'MCP Read-Taint Blocked',
-    summary:
-      'Cross-project write blocked by session read-taint exfiltration protection.',
-    remediation:
-      'Reset the agent session or use isolated sub-agent workspaces for cross-project queries.',
-    docHref:
-      '/docs/zero-trust-security-and-access-visibility#read-taint-high-water-mark',
-    isAal2StepUp: false,
-  },
   LOCKOUT_PREVENTED: {
     code: 'LOCKOUT_PREVENTED',
     title: 'Lockout Prevention Safeguard',
@@ -309,7 +287,6 @@ const PATTERN_RULES: readonly [RegExp, string][] = [
   [/forbidden|permission.*denied|lacks.*permission|access.*denied|\b403\b/i, 'FORBIDDEN'],
   [/not.*found|\b404\b/i, 'NOT_FOUND'],
   [/scope.*violation|insufficient.*scope|scope.*tier/i, 'INSUFFICIENT_SCOPE'],
-  [/taint.*guard|read-taint|cross-scope.*taint/i, 'CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED'],
   [/lockout.*prevented|last.*active.*admin/i, 'LOCKOUT_PREVENTED'],
   [/wip.*limit/i, 'HARD_WIP_LIMIT_EXCEEDED'],
   [/gate.*timeout|workflow.*timeout|validator.*timeout/i, 'GATE_TIMEOUT'],

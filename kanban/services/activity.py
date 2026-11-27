@@ -212,6 +212,7 @@ class ActivityEventType(StrEnum):
     ACL_ENTRY_REVOKED = "ACL_ENTRY_REVOKED"
     DESTRUCTIVE_LIFECYCLE_EXECUTED = "DESTRUCTIVE_LIFECYCLE_EXECUTED"
     CRYPTO_SHRED_EXECUTED = "CRYPTO_SHRED_EXECUTED"
+    # Deprecated / historical-only: kept so existing immutable activity_records deserialize cleanly
     MCP_TAINT_BLOCKED = "MCP_TAINT_BLOCKED"
     SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"
     ISSUE_BULK_EXPORTED = "ISSUE_BULK_EXPORTED"
@@ -483,6 +484,8 @@ _UNENCRYPTED_EVENT_TYPES: Final[frozenset[str]] = frozenset(
         "DESTRUCTIVE_LIFECYCLE_EXECUTED",
         "INVALID_OBJECT_LINK_PURGED",
         "CRYPTO_SHRED_EXECUTED",
+        # Deprecated / historical-only
+        "MCP_TAINT_BLOCKED",
     }
 )
 

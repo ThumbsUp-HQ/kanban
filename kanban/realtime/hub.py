@@ -562,98 +562,6 @@ class RealtimeHub:
         resolved = await self.resolve_channel(session, workspace_id, principal_id, channel)
         return resolved is not None
 
-    async def _resolve_channel_taint(
-        self,
-        session: AsyncSession,
-        workspace_id: uuid.UUID,
-        kind: str,
-        target_uuid: uuid.UUID,
-    ) -> tuple[uuid.UUID | None, bool]:
-        """Resolve parent project ID and untrusted content flag for a channel target."""
-        if kind == "project":
-            return target_uuid, False
-        if kind == "issue":
-            stmt = text(
-                "SELECT project_id, is_untrusted_content "
-                "FROM issues WHERE id = :id AND workspace_id = :ws_id"
-            )
-        elif kind == "doc":
-            stmt = text(
-                "SELECT project_id, is_untrusted_content "
-                "FROM docs WHERE id = :id AND workspace_id = :ws_id"
-            )
-        else:
-            return None, False
-
-        row = (await session.execute(stmt, {"id": target_uuid, "ws_id": workspace_id})).first()
-        if row is not None and row[0] is not None:
-            return uuid.UUID(str(row[0])), bool(row[1])
-        return None, False
-
-    async def _propagate_subscription_read_taint(
-        self,
-        session: AsyncSession,
-        conn: RealtimeConnection,
-        resolved_targets: Sequence[tuple[str, uuid.UUID]],
-    ) -> None:
-        """Propagate read-taint for subscribed projects, issues, and docs to mcp_read_taint."""
-        import hashlib  # noqa: PLC0415
-
-        from kanban.security.read_taint import record_read_taint  # noqa: PLC0415
-
-        taint_project_ids: set[uuid.UUID] = set()
-        untrusted_entries: list[tuple[uuid.UUID, uuid.UUID]] = []
-
-        for kind, target_uuid in resolved_targets:
-            p_id, is_untrusted = await self._resolve_channel_taint(
-                session, conn.workspace_id, kind, target_uuid
-            )
-            if p_id is not None:
-                taint_project_ids.add(p_id)
-                if is_untrusted:
-                    untrusted_entries.append((p_id, target_uuid))
-
-        if not taint_project_ids:
-            return
-
-        mcp_sess = getattr(conn, "mcp_session_id", None)
-        mcp_key = hashlib.sha256(mcp_sess.encode("utf-8")).digest() if mcp_sess else None
-
-        await record_read_taint(
-            session=session,
-            workspace_id=conn.workspace_id,
-            project_ids=taint_project_ids,
-            session_id=conn.session_id,
-            credential_key=conn.token_sha256,
-        )
-        if mcp_key is not None:
-            await record_read_taint(
-                session=session,
-                workspace_id=conn.workspace_id,
-                project_ids=taint_project_ids,
-                session_key=mcp_key,
-            )
-
-        for p_id, src_id in untrusted_entries:
-            await record_read_taint(
-                session=session,
-                workspace_id=conn.workspace_id,
-                project_ids=[p_id],
-                session_id=conn.session_id,
-                credential_key=conn.token_sha256,
-                untrusted_source_object_id=src_id,
-                contains_untrusted_content=True,
-            )
-            if mcp_key is not None:
-                await record_read_taint(
-                    session=session,
-                    workspace_id=conn.workspace_id,
-                    project_ids=[p_id],
-                    session_key=mcp_key,
-                    untrusted_source_object_id=src_id,
-                    contains_untrusted_content=True,
-                )
-
     async def handle_subscribe(
         self,
         session: AsyncSession,
@@ -664,7 +572,6 @@ class RealtimeHub:
     ) -> None:
         """Handle client subscribe request, validating limits and anti-enumeration permissions."""
         successful_channels: list[str] = []
-        resolved_targets: list[tuple[str, uuid.UUID]] = []
 
         for ch in channels:
             if len(conn.subscribed_channels) >= MAX_CHANNELS_PER_CONNECTION:
@@ -690,14 +597,12 @@ class RealtimeHub:
                 )
                 continue
 
-            canonical_ch, target_uuid, kind = resolved
+            canonical_ch, _, _ = resolved
             conn.subscribed_channels.add(ch)
             conn.subscribed_channels.add(canonical_ch)
             successful_channels.append(ch)
-            resolved_targets.append((kind, target_uuid))
 
         if successful_channels:
-            await self._propagate_subscription_read_taint(session, conn, resolved_targets)
             await conn.send_json(
                 {
                     "channels": successful_channels,

@@ -216,6 +216,7 @@ async def get_rls_session(
         ephemeral_project_id=principal.ephemeral_project_id,
         read_only=principal.read_only or (principal.ephemeral_project_id is not None),
         user_access_hash=user_access_hash,
+        credential_boundary=getattr(principal, "credential_boundary", None),
     )
 
     async with session_factory.session(rls_ctx) as session:

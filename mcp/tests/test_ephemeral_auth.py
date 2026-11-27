@@ -1227,7 +1227,6 @@ async def test_case_7_internal_client_hmac_and_error_mapping_coverage(
                 "layer": "optimistic_lock",
                 "candidates": [{"id": "1"}],
                 "blockers": ["KAN-2"],
-                "tainted_by": ["SEC"],
                 "unauthorized_mentions": ["@bob"],
             },
         ),
@@ -1336,12 +1335,6 @@ async def test_case_7_internal_client_hmac_and_error_mapping_coverage(
             await c_err.request("GET", "/api/down")
         assert exc_conn.value.code == McpErrorCode.UPSTREAM_UNAVAILABLE
 
-    assert (
-        KanbanApiClient._resolve_conflict_code(  # noqa: SLF001
-            "urn:problem:cross-scope-taint", ""
-        )
-        == McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
-    )
     assert (
         KanbanApiClient._resolve_conflict_code(  # noqa: SLF001
             "urn:problem:mention-access-warning", ""
