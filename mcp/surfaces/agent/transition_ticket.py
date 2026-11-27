@@ -120,6 +120,32 @@ def _validate_transition_arguments(arguments: dict[str, Any]) -> None:  # noqa: 
             raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
 
+def _is_use_complete_work(exc: KbMcpError) -> bool:
+    """Return True when upstream rejected a completed-group transition with USE_COMPLETE_WORK."""
+    return "USE_COMPLETE_WORK" in {
+        str(getattr(exc.code, "value", exc.code)),
+        str((exc.extra or {}).get("code", "")),
+    }
+
+
+async def _route_to_complete_work(
+    arguments: dict[str, Any], identifier: str, client: KanbanApiClient
+) -> dict[str, Any]:
+    """Route a completed-group transition through the complete_work server gate."""
+    from mcp.surfaces.agent.complete_work import complete_work  # noqa: PLC0415
+
+    cw: dict[str, Any] = {"identifier": identifier, "to_state": arguments["to_state"].strip()}
+    if arguments.get("comment_markdown"):
+        cw["summary"] = arguments["comment_markdown"]
+    for k in ("verification_proof", "fencing_token", "lease_action"):
+        if arguments.get(k) is not None:
+            cw[k] = arguments[k]
+    res = await complete_work(cw, client=client)
+    if res.get("status") == "completed":
+        res = {**res, "status": "transitioned"}
+    return res
+
+
 async def transition_ticket(  # noqa: C901
     arguments: dict[str, Any],
     *,
@@ -166,6 +192,8 @@ async def transition_ticket(  # noqa: C901
             mcp_session_id=session_id,
         )
     except KbMcpError as exc:
+        if _is_use_complete_work(exc):
+            return await _route_to_complete_work(arguments, identifier, active_client)
         if exc.code == McpErrorCode.INVALID_TRANSITION and exc.valid_options:
             first_state = exc.valid_options[0]
             opts_str = ", ".join(str(s) for s in exc.valid_options)

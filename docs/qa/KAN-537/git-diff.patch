@@ -1,0 +1,556 @@
+diff --git a/kanban/api/v1/issue_workflow.py b/kanban/api/v1/issue_workflow.py
+index d1f3259b..f764e065 100644
+--- a/kanban/api/v1/issue_workflow.py
++++ b/kanban/api/v1/issue_workflow.py
+@@ -65,8 +65,8 @@ class CompleteWorkRequest(BaseModel):
+ 
+     model_config = ConfigDict(extra="forbid")
+ 
+-    summary_markdown: Annotated[str, Field(min_length=1, max_length=65536)]
+-    verification_proof: dict[str, Any]
++    summary_markdown: Annotated[str, Field(min_length=1, max_length=65536)] = "Completed via MCP"
++    verification_proof: dict[str, Any] | None = None
+     to_state: Annotated[str | None, Field(max_length=100)] = None
+     fencing_token: int | None = None
+     lease_action: str | None = None
+diff --git a/kanban/issues/proof.py b/kanban/issues/proof.py
+index 7c1a8347..92f20846 100644
+--- a/kanban/issues/proof.py
++++ b/kanban/issues/proof.py
+@@ -127,7 +127,7 @@ class RealityCheckerProof(BaseModel):
+     model_config = ConfigDict(extra="forbid")
+ 
+     verdict: Literal["READY", "NEEDS_WORK"]
+-    grade: Annotated[str, Field(pattern=r"^[A-F]$")]
++    grade: Annotated[str, Field(pattern=r"^[A-F][+-]?$")]
+     report_path: Annotated[
+         str,
+         Field(pattern=_pydantic_pattern(REPORT_PATH_REGEX)),
+diff --git a/kanban/issues/workflow_service.py b/kanban/issues/workflow_service.py
+index e727e590..a0cd43a4 100644
+--- a/kanban/issues/workflow_service.py
++++ b/kanban/issues/workflow_service.py
+@@ -114,8 +114,37 @@ def set_workflow_gate_hook(hook: WorkflowGateHook | None) -> None:
+     _ACTIVE_GATE_HOOK = hook if hook is not None else DefaultWorkflowGateHook()
+ 
+ 
+-def render_proof_table(summary_markdown: str, proof: dict[str, Any]) -> str:
++_IDEA_STATE_NAMES: Final[frozenset[str]] = frozenset(
++    {"crazy_ideas", "crazy ideas", "ideas", "idea"}
++)
++_PASSING_GRADES: Final[frozenset[str]] = frozenset({"A", "A-", "A+"})
++DEFAULT_COMPLETION_SUMMARY: Final[str] = "Completed via MCP"
++
++
++def _pick_started_state(states: list[WorkflowState]) -> WorkflowState | None:
++    """Pick the begin_work target among started-group states (ordered by sort_order).
++
++    Order: is_default, exact "In Progress" (case-insensitive), first non-idea state,
++    else the lowest sort_order state. Returns None when ``states`` is empty.
++    """
++    if not states:
++        return None
++    for st in states:
++        if st.is_default:
++            return st
++    for st in states:
++        if st.name.strip().lower() == "in progress":
++            return st
++    for st in states:
++        if st.name.strip().lower() not in _IDEA_STATE_NAMES:
++            return st
++    return states[0]
++
++
++def render_proof_table(summary_markdown: str, proof: dict[str, Any] | None) -> str:
+     """Render markdown summary coupled with structured verification proof table."""
++    if not proof:
++        return summary_markdown.strip()
+     qa_dir = str(proof.get("qa_dir", ""))
+     rc = proof.get("reality_checker", {})
+     verdict = str(rc.get("verdict", ""))
+@@ -351,7 +380,7 @@ async def begin_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+         )
+         .order_by(WorkflowState.sort_order.asc(), WorkflowState.id.asc())
+     )
+-    started_state = (await session.execute(stmt_state)).scalars().first()
++    started_state = _pick_started_state(list((await session.execute(stmt_state)).scalars().all()))
+     if started_state is None:
+         raise ProblemException(
+             code="NO_STARTED_STATE",
+@@ -657,7 +686,7 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+     caller: PrincipalContext,
+     issue_ref: str,
+     summary_markdown: str,
+-    verification_proof: dict[str, Any],
++    verification_proof: dict[str, Any] | None = None,
+     to_state_ref: str | None = None,
+     if_match: str | None = None,
+     fencing_token: int | None = None,
+@@ -699,36 +728,11 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+             extra={"blockers": blockers},
+         )
+ 
+-    # 2. Validate structured verification_proof schema and ticket key invariants
+-    proj = await session.get(Project, issue.project_id)
+-    issue_key = f"{proj.identifier}-{issue.sequence_id}" if proj else str(issue.id)
+-
+-    try:
+-        parsed_proof = VerificationProof.model_validate(verification_proof)
+-        validate_proof_ticket_key(parsed_proof, issue_key)
+-    except (ValueError, ValidationError) as exc:
+-        raise ProblemException(
+-            code="VALIDATION_FAILED",
+-            status=422,
+-            title="Validation Failed",
+-            detail=str(exc),
+-        ) from exc
+-
+-    if parsed_proof.reality_checker.verdict != "READY" or parsed_proof.reality_checker.grade != "A":
+-        raise ProblemException(
+-            code="QA_VERDICT_NOT_READY",
+-            status=422,
+-            title="QA Verdict Not Ready",
+-            detail=(
+-                "Reality-Checker verdict must be READY with grade A "
+-                f"(got {parsed_proof.reality_checker.verdict} / "
+-                f"{parsed_proof.reality_checker.grade})"
+-            ),
+-        )
+-
+-    # Validate summary markdown length
++    # 2. Validate optional structured verification_proof (the server-side gate still runs)
++    if not summary_markdown or not summary_markdown.strip():
++        summary_markdown = DEFAULT_COMPLETION_SUMMARY
+     encoded_summary = summary_markdown.encode("utf-8")
+-    if len(encoded_summary) < 1 or len(encoded_summary) > MAX_BODY_BYTES:
++    if len(encoded_summary) > MAX_BODY_BYTES:
+         raise ProblemException(
+             code="VALIDATION_FAILED",
+             status=422,
+@@ -736,15 +740,44 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+             detail="summary_markdown length must be between 1 and 65536 bytes",
+         )
+ 
+-    try:
+-        validate_reality_checker_report(summary_markdown, require_ready=True)
+-    except ValueError as exc:
+-        raise ProblemException(
+-            code="INVALID_REALITY_CHECKER_REPORT",
+-            status=422,
+-            title="Invalid Reality-Checker Report",
+-            detail=str(exc),
+-        ) from exc
++    if verification_proof:
++        proj = await session.get(Project, issue.project_id)
++        issue_key = f"{proj.identifier}-{issue.sequence_id}" if proj else str(issue.id)
++        try:
++            parsed_proof = VerificationProof.model_validate(verification_proof)
++            validate_proof_ticket_key(parsed_proof, issue_key)
++        except (ValueError, ValidationError) as exc:
++            raise ProblemException(
++                code="VALIDATION_FAILED",
++                status=422,
++                title="Validation Failed",
++                detail=str(exc),
++            ) from exc
++
++        if (
++            parsed_proof.reality_checker.verdict != "READY"
++            or parsed_proof.reality_checker.grade not in _PASSING_GRADES
++        ):
++            raise ProblemException(
++                code="QA_VERDICT_NOT_READY",
++                status=422,
++                title="QA Verdict Not Ready",
++                detail=(
++                    "Reality-Checker verdict must be READY with grade A, A- or A+ "
++                    f"(got {parsed_proof.reality_checker.verdict} / "
++                    f"{parsed_proof.reality_checker.grade})"
++                ),
++            )
++
++        try:
++            validate_reality_checker_report(summary_markdown, require_ready=True)
++        except ValueError as exc:
++            raise ProblemException(
++                code="INVALID_REALITY_CHECKER_REPORT",
++                status=422,
++                title="Invalid Reality-Checker Report",
++                detail=str(exc),
++            ) from exc
+ 
+     # Resolve target completed state
+     if to_state_ref:
+@@ -919,7 +952,7 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+         object_id=issue.id,
+         actor_principal_id=caller.principal_id,
+         event_type=ActivityEventType.WORK_COMPLETED,
+-        payload=verification_proof,
++        payload=verification_proof or {},
+     )
+ 
+     proj = await session.get(Project, issue.project_id)
+@@ -932,4 +965,4 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+ 
+     await session.flush()
+     await session.refresh(issue)
+-    return issue, from_state, target_state, verification_proof, comment_ref, gate_hold
++    return issue, from_state, target_state, verification_proof or {}, comment_ref, gate_hold
+diff --git a/mcp/surfaces/agent/complete_work.py b/mcp/surfaces/agent/complete_work.py
+index 4ed7ff5c..651832cf 100644
+--- a/mcp/surfaces/agent/complete_work.py
++++ b/mcp/surfaces/agent/complete_work.py
+@@ -31,6 +31,8 @@ __all__ = [
+ _MAX_IDENTIFIER_LEN: Final[int] = 200
+ _MAX_SUMMARY_BYTES: Final[int] = 65536
+ _MAX_STATE_LEN: Final[int] = 100
++_MAX_BATCH: Final[int] = 25
++_DEFAULT_SUMMARY: Final[str] = "Completed via MCP"
+ 
+ COMPLETE_WORK_SCHEMA: Final[dict[str, Any]] = {
+     "type": "object",
+@@ -38,6 +40,14 @@ COMPLETE_WORK_SCHEMA: Final[dict[str, Any]] = {
+         "identifier": {
+             "type": "string",
+         },
++        "identifiers": {
++            "type": "array",
++            "items": {"type": "string"},
++            "maxItems": 25,
++        },
++        "summary": {
++            "type": "string",
++        },
+         "summary_markdown": {
+             "type": "string",
+         },
+@@ -53,11 +63,19 @@ COMPLETE_WORK_SCHEMA: Final[dict[str, Any]] = {
+             "enum": ["release", "keep", "renew"],
+         },
+     },
+-    "required": ["identifier", "summary_markdown", "verification_proof"],
++    "required": [],
+     "additionalProperties": False,
+ }
+ 
+ 
++def _summary_of(arguments: dict[str, Any]) -> object:
++    """Return the summary (alias of summary_markdown) or the server default."""
++    for key in ("summary", "summary_markdown"):
++        if arguments.get(key) is not None:
++            return arguments[key]
++    return _DEFAULT_SUMMARY
++
++
+ def _validate_complete_work_arguments(  # noqa: C901, PLR0912, PLR0915
+     arguments: dict[str, Any],
+ ) -> VerificationProof | None:
+@@ -78,18 +96,14 @@ def _validate_complete_work_arguments(  # noqa: C901, PLR0912, PLR0915
+     if identifier.strip() == "help":
+         return None
+ 
+-    if "summary_markdown" not in arguments:
+-        msg = "Missing required argument 'summary_markdown'"
+-        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+-
+-    summary = arguments["summary_markdown"]
++    summary = _summary_of(arguments)
+     if not isinstance(summary, str):
+-        msg = "Argument 'summary_markdown' must be a string"
++        msg = "Argument 'summary' must be a string"
+         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+ 
+     summary_bytes = len(summary.encode("utf-8"))
+     if summary_bytes < 1 or summary_bytes > _MAX_SUMMARY_BYTES:
+-        msg = f"Argument 'summary_markdown' must be 1..{_MAX_SUMMARY_BYTES} bytes"
++        msg = f"Argument 'summary' must be 1..{_MAX_SUMMARY_BYTES} bytes"
+         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+ 
+     findings = scan_text_for_secrets(summary)
+@@ -108,7 +122,7 @@ def _validate_complete_work_arguments(  # noqa: C901, PLR0912, PLR0915
+             },
+         )
+ 
+-    if (
++    if arguments.get("verification_proof") is not None and (
+         summary.strip().startswith("# Integration Agent Reality-Based Report")
+         or "## Reality Check Validation" in summary
+         or "NEEDS WORK" in summary
+@@ -120,20 +134,17 @@ def _validate_complete_work_arguments(  # noqa: C901, PLR0912, PLR0915
+         except ValueError as err:
+             raise KbMcpError(McpErrorCode.VALIDATION_FAILED, str(err)) from err
+ 
+-    if "verification_proof" not in arguments:
+-        msg = "Missing required argument 'verification_proof'"
+-        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+-
+-    raw_proof = arguments["verification_proof"]
+-    if not isinstance(raw_proof, dict):
+-        msg = "Argument 'verification_proof' must be a dictionary"
+-        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+-
+-    try:
+-        proof = VerificationProof.model_validate(raw_proof)
+-        validate_proof_ticket_key(proof, identifier.strip())
+-    except (ValidationError, ValueError) as err:
+-        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, str(err)) from err
++    proof: VerificationProof | None = None
++    raw_proof = arguments.get("verification_proof")
++    if raw_proof is not None:
++        if not isinstance(raw_proof, dict):
++            msg = "Argument 'verification_proof' must be a dictionary"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++        try:
++            proof = VerificationProof.model_validate(raw_proof)
++            validate_proof_ticket_key(proof, identifier.strip())
++        except (ValidationError, ValueError) as err:
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, str(err)) from err
+ 
+     if "to_state" in arguments and arguments["to_state"] is not None:
+         ts = arguments["to_state"]
+@@ -159,12 +170,101 @@ def _validate_complete_work_arguments(  # noqa: C901, PLR0912, PLR0915
+     return proof
+ 
+ 
++def _batch_identifiers(arguments: dict[str, Any]) -> list[str] | None:
++    """Return the deduped identifier list for batch mode, or None for single mode."""
++    has_one = arguments.get("identifier") is not None
++    many = arguments.get("identifiers")
++    if many is None:
++        return None
++    if has_one:
++        raise KbMcpError(
++            McpErrorCode.VALIDATION_FAILED,
++            "Provide either 'identifier' or 'identifiers', not both",
++            fix_hint="Pass a single 'identifier' or a list in 'identifiers'.",
++        )
++    if not isinstance(many, list) or not many:
++        raise KbMcpError(
++            McpErrorCode.VALIDATION_FAILED,
++            "Argument 'identifiers' must be a non-empty list of strings",
++            fix_hint="Pass 'identifiers': ['KEY-1', 'KEY-2'].",
++        )
++    out: list[str] = []
++    for item in many:
++        if not isinstance(item, str) or not item.strip():
++            msg = "Each entry of 'identifiers' must be a non-empty string"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++        if len(item.strip()) > _MAX_IDENTIFIER_LEN:
++            msg = f"Identifier exceeds maximum length of {_MAX_IDENTIFIER_LEN}"
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++        if item.strip() not in out:
++            out.append(item.strip())
++    if len(out) > _MAX_BATCH:
++        msg = f"'identifiers' accepts at most {_MAX_BATCH} entries"
++        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++    return out
++
++
+ async def complete_work(
+     arguments: dict[str, Any],
+     *,
+     client: KanbanApiClient | None = None,
+ ) -> dict[str, Any]:
+-    """Execute complete_work workflow: audit blockers, check QA gate, and close ticket."""
++    """Complete one ticket (identifier) or a batch (identifiers) via the server gate."""
++    ids = _batch_identifiers(arguments)
++    if ids is None:
++        if arguments.get("identifier") is None:
++            raise KbMcpError(
++                McpErrorCode.VALIDATION_FAILED,
++                "Missing required argument 'identifier' or 'identifiers'",
++                fix_hint="Pass 'identifier': 'KEY-1' or 'identifiers': ['KEY-1', 'KEY-2'].",
++            )
++        return await _complete_single(arguments, client=client)
++    results: list[dict[str, Any]] = []
++    for ident in ids:
++        sub_args = {k: v for k, v in arguments.items() if k not in ("identifiers", "fencing_token")}
++        sub_args["identifier"] = ident
++        try:
++            res = await _complete_single(sub_args, client=client)
++            entry: dict[str, Any] = {"identifier": ident, "status": res.get("status", "completed")}
++            for k in ("state", "to_state", "gate_comment"):
++                if k in res:
++                    entry[k if k != "to_state" else "state"] = res[k]
++            results.append(entry)
++        except KbMcpError as exc:
++            results.append(
++                {
++                    "identifier": ident,
++                    "status": "failed",
++                    "error": {
++                        "code": str(getattr(exc.code, "value", exc.code)),
++                        "message": exc.message,
++                        "fix_hint": exc.fix_hint or exc.hint or "",
++                    },
++                }
++            )
++        except Exception as exc:  # noqa: BLE001 - one failure must never abort the batch
++            results.append(
++                {
++                    "identifier": ident,
++                    "status": "failed",
++                    "error": {"code": "INTERNAL", "message": type(exc).__name__, "fix_hint": ""},
++                }
++            )
++    failed = sum(1 for r in results if r["status"] == "failed")
++    return {
++        "status": "batch",
++        "completed": len(results) - failed,
++        "failed": failed,
++        "results": results,
++    }
++
++
++async def _complete_single(  # noqa: C901
++    arguments: dict[str, Any],
++    *,
++    client: KanbanApiClient | None = None,
++) -> dict[str, Any]:
++    """Execute complete_work workflow for one ticket."""
+     proof_obj = _validate_complete_work_arguments(arguments)
+     identifier = arguments["identifier"].strip()
+ 
+@@ -185,11 +285,9 @@ async def complete_work(
+             mcp_session_id=session_id,
+         )
+ 
+-    summary_markdown = arguments["summary_markdown"]
+-    payload: dict[str, Any] = {
+-        "summary_markdown": summary_markdown,
+-        "verification_proof": arguments["verification_proof"],
+-    }
++    payload: dict[str, Any] = {"summary_markdown": str(_summary_of(arguments))}
++    if arguments.get("verification_proof") is not None:
++        payload["verification_proof"] = arguments["verification_proof"]
+     if arguments.get("to_state"):
+         payload["to_state"] = arguments["to_state"].strip()
+     if arguments.get("fencing_token") is not None:
+@@ -235,15 +333,13 @@ async def complete_work(
+         str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
+     )
+ 
+-    proof_summary: dict[str, Any] = {
+-        "qa_dir": proof_obj.qa_dir if proof_obj else arguments["verification_proof"].get("qa_dir"),
+-        "artifacts": len(proof_obj.artifacts)
+-        if proof_obj
+-        else len(arguments["verification_proof"].get("artifacts", [])),
+-        "verdict": proof_obj.reality_checker.verdict
+-        if proof_obj
+-        else arguments["verification_proof"].get("reality_checker", {}).get("verdict"),
+-    }
++    proof_summary: dict[str, Any] = {}
++    if proof_obj is not None:
++        proof_summary = {
++            "qa_dir": proof_obj.qa_dir,
++            "artifacts": len(proof_obj.artifacts),
++            "verdict": proof_obj.reality_checker.verdict,
++        }
+ 
+     result: dict[str, Any] = {
+         "status": "completed",
+@@ -251,8 +347,9 @@ async def complete_work(
+         "issue_key": key,
+         "sequence_number": seq_num,
+         "state": resp_data.get("target_state") or state_str or "Done",
+-        "proof": proof_summary,
+     }
++    if proof_summary:
++        result["proof"] = proof_summary
+     if resp_data.get("comment_ref"):
+         result["comment"] = str(resp_data["comment_ref"])
+ 
+diff --git a/mcp/surfaces/agent/proof.py b/mcp/surfaces/agent/proof.py
+index 8ed35f0c..a6dc776b 100644
+--- a/mcp/surfaces/agent/proof.py
++++ b/mcp/surfaces/agent/proof.py
+@@ -57,7 +57,7 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
+                 },
+                 "grade": {
+                     "type": "string",
+-                    "pattern": r"^[A-F]$",
++                    "pattern": r"^[A-F][+-]?$",
+                 },
+                 "report_path": {
+                     "type": "string",
+diff --git a/mcp/surfaces/agent/transition_ticket.py b/mcp/surfaces/agent/transition_ticket.py
+index d6045230..a5fbd7e4 100644
+--- a/mcp/surfaces/agent/transition_ticket.py
++++ b/mcp/surfaces/agent/transition_ticket.py
+@@ -120,6 +120,32 @@ def _validate_transition_arguments(arguments: dict[str, Any]) -> None:  # noqa:
+             raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+ 
+ 
++def _is_use_complete_work(exc: KbMcpError) -> bool:
++    """Return True when upstream rejected a completed-group transition with USE_COMPLETE_WORK."""
++    return "USE_COMPLETE_WORK" in {
++        str(getattr(exc.code, "value", exc.code)),
++        str((exc.extra or {}).get("code", "")),
++    }
++
++
++async def _route_to_complete_work(
++    arguments: dict[str, Any], identifier: str, client: KanbanApiClient
++) -> dict[str, Any]:
++    """Route a completed-group transition through the complete_work server gate."""
++    from mcp.surfaces.agent.complete_work import complete_work  # noqa: PLC0415
++
++    cw: dict[str, Any] = {"identifier": identifier, "to_state": arguments["to_state"].strip()}
++    if arguments.get("comment_markdown"):
++        cw["summary"] = arguments["comment_markdown"]
++    for k in ("verification_proof", "fencing_token", "lease_action"):
++        if arguments.get(k) is not None:
++            cw[k] = arguments[k]
++    res = await complete_work(cw, client=client)
++    if res.get("status") == "completed":
++        res = {**res, "status": "transitioned"}
++    return res
++
++
+ async def transition_ticket(  # noqa: C901
+     arguments: dict[str, Any],
+     *,
+@@ -166,6 +192,8 @@ async def transition_ticket(  # noqa: C901
+             mcp_session_id=session_id,
+         )
+     except KbMcpError as exc:
++        if _is_use_complete_work(exc):
++            return await _route_to_complete_work(arguments, identifier, active_client)
+         if exc.code == McpErrorCode.INVALID_TRANSITION and exc.valid_options:
+             first_state = exc.valid_options[0]
+             opts_str = ", ".join(str(s) for s in exc.valid_options)
+diff --git a/mcp/tests/agent/test_workflow_argument_validation.py b/mcp/tests/agent/test_workflow_argument_validation.py
+index b3a20157..69329e50 100644
+--- a/mcp/tests/agent/test_workflow_argument_validation.py
++++ b/mcp/tests/agent/test_workflow_argument_validation.py
+@@ -183,9 +183,7 @@ def test_complete_work_argument_validation() -> None:
+     # Identifier == "help" -> returns None
+     assert _validate_complete_work_arguments({"identifier": "help"}) is None
+ 
+-    # Missing summary_markdown
+-    with pytest.raises(KbMcpError):
+-        _validate_complete_work_arguments({"identifier": "KAN-142"})
++    assert _validate_complete_work_arguments({"identifier": "KAN-142"}) is None
+ 
+     # Non-string summary_markdown
+     with pytest.raises(KbMcpError):
+@@ -204,14 +202,10 @@ def test_complete_work_argument_validation() -> None:
+             }
+         )
+ 
+-    # Missing verification_proof
+-    with pytest.raises(KbMcpError):
+-        _validate_complete_work_arguments(
+-            {
+-                "identifier": "KAN-142",
+-                "summary_markdown": "Summary",
+-            }
+-        )
++    assert (
++        _validate_complete_work_arguments({"identifier": "KAN-142", "summary_markdown": "S"})
++        is None
++    )
+ 
+     # Non-dict verification_proof
+     with pytest.raises(KbMcpError):

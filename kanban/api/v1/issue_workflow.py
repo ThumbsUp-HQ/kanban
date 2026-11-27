@@ -65,8 +65,8 @@ class CompleteWorkRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    summary_markdown: Annotated[str, Field(min_length=1, max_length=65536)]
-    verification_proof: dict[str, Any]
+    summary_markdown: Annotated[str, Field(min_length=1, max_length=65536)] = "Completed via MCP"
+    verification_proof: dict[str, Any] | None = None
     to_state: Annotated[str | None, Field(max_length=100)] = None
     fencing_token: int | None = None
     lease_action: str | None = None

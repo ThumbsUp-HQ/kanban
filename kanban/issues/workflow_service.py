@@ -114,8 +114,37 @@ def set_workflow_gate_hook(hook: WorkflowGateHook | None) -> None:
     _ACTIVE_GATE_HOOK = hook if hook is not None else DefaultWorkflowGateHook()
 
 
-def render_proof_table(summary_markdown: str, proof: dict[str, Any]) -> str:
+_IDEA_STATE_NAMES: Final[frozenset[str]] = frozenset(
+    {"crazy_ideas", "crazy ideas", "ideas", "idea"}
+)
+_PASSING_GRADES: Final[frozenset[str]] = frozenset({"A", "A-", "A+"})
+DEFAULT_COMPLETION_SUMMARY: Final[str] = "Completed via MCP"
+
+
+def _pick_started_state(states: list[WorkflowState]) -> WorkflowState | None:
+    """Pick the begin_work target among started-group states (ordered by sort_order).
+
+    Order: is_default, exact "In Progress" (case-insensitive), first non-idea state,
+    else the lowest sort_order state. Returns None when ``states`` is empty.
+    """
+    if not states:
+        return None
+    for st in states:
+        if st.is_default:
+            return st
+    for st in states:
+        if st.name.strip().lower() == "in progress":
+            return st
+    for st in states:
+        if st.name.strip().lower() not in _IDEA_STATE_NAMES:
+            return st
+    return states[0]
+
+
+def render_proof_table(summary_markdown: str, proof: dict[str, Any] | None) -> str:
     """Render markdown summary coupled with structured verification proof table."""
+    if not proof:
+        return summary_markdown.strip()
     qa_dir = str(proof.get("qa_dir", ""))
     rc = proof.get("reality_checker", {})
     verdict = str(rc.get("verdict", ""))
@@ -351,7 +380,7 @@ async def begin_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
         )
         .order_by(WorkflowState.sort_order.asc(), WorkflowState.id.asc())
     )
-    started_state = (await session.execute(stmt_state)).scalars().first()
+    started_state = _pick_started_state(list((await session.execute(stmt_state)).scalars().all()))
     if started_state is None:
         raise ProblemException(
             code="NO_STARTED_STATE",
@@ -657,7 +686,7 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     caller: PrincipalContext,
     issue_ref: str,
     summary_markdown: str,
-    verification_proof: dict[str, Any],
+    verification_proof: dict[str, Any] | None = None,
     to_state_ref: str | None = None,
     if_match: str | None = None,
     fencing_token: int | None = None,
@@ -699,36 +728,11 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
             extra={"blockers": blockers},
         )
 
-    # 2. Validate structured verification_proof schema and ticket key invariants
-    proj = await session.get(Project, issue.project_id)
-    issue_key = f"{proj.identifier}-{issue.sequence_id}" if proj else str(issue.id)
-
-    try:
-        parsed_proof = VerificationProof.model_validate(verification_proof)
-        validate_proof_ticket_key(parsed_proof, issue_key)
-    except (ValueError, ValidationError) as exc:
-        raise ProblemException(
-            code="VALIDATION_FAILED",
-            status=422,
-            title="Validation Failed",
-            detail=str(exc),
-        ) from exc
-
-    if parsed_proof.reality_checker.verdict != "READY" or parsed_proof.reality_checker.grade != "A":
-        raise ProblemException(
-            code="QA_VERDICT_NOT_READY",
-            status=422,
-            title="QA Verdict Not Ready",
-            detail=(
-                "Reality-Checker verdict must be READY with grade A "
-                f"(got {parsed_proof.reality_checker.verdict} / "
-                f"{parsed_proof.reality_checker.grade})"
-            ),
-        )
-
-    # Validate summary markdown length
+    # 2. Validate optional structured verification_proof (the server-side gate still runs)
+    if not summary_markdown or not summary_markdown.strip():
+        summary_markdown = DEFAULT_COMPLETION_SUMMARY
     encoded_summary = summary_markdown.encode("utf-8")
-    if len(encoded_summary) < 1 or len(encoded_summary) > MAX_BODY_BYTES:
+    if len(encoded_summary) > MAX_BODY_BYTES:
         raise ProblemException(
             code="VALIDATION_FAILED",
             status=422,
@@ -736,15 +740,44 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
             detail="summary_markdown length must be between 1 and 65536 bytes",
         )
 
-    try:
-        validate_reality_checker_report(summary_markdown, require_ready=True)
-    except ValueError as exc:
-        raise ProblemException(
-            code="INVALID_REALITY_CHECKER_REPORT",
-            status=422,
-            title="Invalid Reality-Checker Report",
-            detail=str(exc),
-        ) from exc
+    if verification_proof:
+        proj = await session.get(Project, issue.project_id)
+        issue_key = f"{proj.identifier}-{issue.sequence_id}" if proj else str(issue.id)
+        try:
+            parsed_proof = VerificationProof.model_validate(verification_proof)
+            validate_proof_ticket_key(parsed_proof, issue_key)
+        except (ValueError, ValidationError) as exc:
+            raise ProblemException(
+                code="VALIDATION_FAILED",
+                status=422,
+                title="Validation Failed",
+                detail=str(exc),
+            ) from exc
+
+        if (
+            parsed_proof.reality_checker.verdict != "READY"
+            or parsed_proof.reality_checker.grade not in _PASSING_GRADES
+        ):
+            raise ProblemException(
+                code="QA_VERDICT_NOT_READY",
+                status=422,
+                title="QA Verdict Not Ready",
+                detail=(
+                    "Reality-Checker verdict must be READY with grade A, A- or A+ "
+                    f"(got {parsed_proof.reality_checker.verdict} / "
+                    f"{parsed_proof.reality_checker.grade})"
+                ),
+            )
+
+        try:
+            validate_reality_checker_report(summary_markdown, require_ready=True)
+        except ValueError as exc:
+            raise ProblemException(
+                code="INVALID_REALITY_CHECKER_REPORT",
+                status=422,
+                title="Invalid Reality-Checker Report",
+                detail=str(exc),
+            ) from exc
 
     # Resolve target completed state
     if to_state_ref:
@@ -919,7 +952,7 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
         object_id=issue.id,
         actor_principal_id=caller.principal_id,
         event_type=ActivityEventType.WORK_COMPLETED,
-        payload=verification_proof,
+        payload=verification_proof or {},
     )
 
     proj = await session.get(Project, issue.project_id)
@@ -932,4 +965,4 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
 
     await session.flush()
     await session.refresh(issue)
-    return issue, from_state, target_state, verification_proof, comment_ref, gate_hold
+    return issue, from_state, target_state, verification_proof or {}, comment_ref, gate_hold

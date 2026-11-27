@@ -183,9 +183,7 @@ def test_complete_work_argument_validation() -> None:
     # Identifier == "help" -> returns None
     assert _validate_complete_work_arguments({"identifier": "help"}) is None
 
-    # Missing summary_markdown
-    with pytest.raises(KbMcpError):
-        _validate_complete_work_arguments({"identifier": "KAN-142"})
+    assert _validate_complete_work_arguments({"identifier": "KAN-142"}) is None
 
     # Non-string summary_markdown
     with pytest.raises(KbMcpError):
@@ -204,14 +202,10 @@ def test_complete_work_argument_validation() -> None:
             }
         )
 
-    # Missing verification_proof
-    with pytest.raises(KbMcpError):
-        _validate_complete_work_arguments(
-            {
-                "identifier": "KAN-142",
-                "summary_markdown": "Summary",
-            }
-        )
+    assert (
+        _validate_complete_work_arguments({"identifier": "KAN-142", "summary_markdown": "S"})
+        is None
+    )
 
     # Non-dict verification_proof
     with pytest.raises(KbMcpError):

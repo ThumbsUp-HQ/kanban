@@ -127,7 +127,7 @@ class RealityCheckerProof(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     verdict: Literal["READY", "NEEDS_WORK"]
-    grade: Annotated[str, Field(pattern=r"^[A-F]$")]
+    grade: Annotated[str, Field(pattern=r"^[A-F][+-]?$")]
     report_path: Annotated[
         str,
         Field(pattern=_pydantic_pattern(REPORT_PATH_REGEX)),

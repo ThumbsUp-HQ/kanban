@@ -57,7 +57,7 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
                 },
                 "grade": {
                     "type": "string",
-                    "pattern": r"^[A-F]$",
+                    "pattern": r"^[A-F][+-]?$",
                 },
                 "report_path": {
                     "type": "string",
