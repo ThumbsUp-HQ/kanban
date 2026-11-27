@@ -267,6 +267,28 @@ def build_wiki_chapter_anchors_map(wiki_dir: Path) -> dict[str, set[str]]:
             {
                 "palette",
                 "color-presets",
+                "saved-views",
+                "saved-views-and-custom-presets",
+                "table-view-and-column-customization",
+            }
+        )
+    if "ticket-screen-and-work-item-features" in chapter_anchors:
+        chapter_anchors["ticket-screen-and-work-item-features"].update(
+            {
+                "csv-and-zip-import-and-export",
+                "csv-and-password-protected-zip-aes-256-import-and-export",
+                "search-and-filtering",
+                "quick-create-work-item-modal-c",
+                "the-960px-ticket-peek-drawer-peek",
+                "duplication-and-copying",
+                "activity-stream-and-audit-ledger",
+            }
+        )
+    if "zero-trust-security-and-access-visibility" in chapter_anchors:
+        chapter_anchors["zero-trust-security-and-access-visibility"].update(
+            {
+                "effective-resource-access-era-evaluation",
+                "universal-access-control-model",
             }
         )
 

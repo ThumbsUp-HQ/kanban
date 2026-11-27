@@ -1,0 +1,35 @@
+diff --git a/Enterprise-Whitespace-and-Kanban-Board.md b/Enterprise-Whitespace-and-Kanban-Board.md
+index 1cb442c..8bec169 100644
+--- a/Enterprise-Whitespace-and-Kanban-Board.md
++++ b/Enterprise-Whitespace-and-Kanban-Board.md
+@@ -161,6 +161,12 @@ flowchart LR
+ 
+ ![Timeline View with BLOCKS Dependency Arrows](images/38-timeline-blocks-arrows.png)
+ 
++### Saved Views and Custom Presets
++Saved views allow engineers and leads to persist, share, and rapidly recall customized viewport configurations across all 5 native layouts:
++- **Private vs Workspace-Shared Scope:** Views can be saved as private (accessible only to the creator) or workspace-shared (visible and selectable by all workspace members).
++- **Configuration Persistence:** A saved view captures active filter predicates, text search queries, state selections, 2D swimlane grouping criteria, sort ordering, and layout mode (`board`, `list`, `table`, `calendar`, `timeline`).
++- **Preset Management:** Users can update existing presets, duplicate views with modified parameters, set a default intake view, and rename or archive obsolete presets without mutating underlying issue records.
++
+ ---
+ 
+ ## Project Settings Studios and Governance
+diff --git a/Ticket-Screen-and-Work-Item-Features.md b/Ticket-Screen-and-Work-Item-Features.md
+index 7cb6527..ed481e0 100644
+--- a/Ticket-Screen-and-Work-Item-Features.md
++++ b/Ticket-Screen-and-Work-Item-Features.md
+@@ -149,6 +149,13 @@ Work items completed past the retention threshold are automatically moved to arc
+ ### Labels
+ Multi-colored semantic labels support both workspace-level and project-level scopes, with optional mutual exclusion groups enforcing single-selection among conflicting categories.
+ 
++### CSV and Password-Protected ZIP (AES-256) Import and Export
++👍kanban provides bulk data portability with cryptographic export protection and automated schema ingestion:
++- **Standard CSV Default Export:** Fast, uncompressed tabular export of issues and metadata adhering to standard RFC 4180 CSV formatting, ideal for spreadsheets and external reporting.
++- **AES-256 Password-Protected ZIP Archives:** Encrypted archive exports bundling issues, sub-tasks, and raw attachment files inside a password-protected ZIP container using industry-standard AES-256 encryption.
++- **Attachment Bundling:** Complete asset inclusion retaining original filenames, content hashes, and MIME types in a dedicated `attachments/` folder within the encrypted archive.
++- **CSV Import Column Mapping:** Interactive import wizard supporting automatic header detection and manual column mapping for titles, descriptions, priorities, states, assignees, and custom field values.
++
+ ---
+ 
+ ## PostgreSQL Issue Copy and Deep Subtree Duplication Procedure
