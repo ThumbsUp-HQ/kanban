@@ -53,3 +53,9 @@ Three-surface Model Context Protocol server exposing isolated mounts `/mcp/agent
 - `RATE_LIMITED`: Upstream HTTP 429 received from `kanban-api`.
 - `UPSTREAM_UNAVAILABLE`: Network failure, connection drop, or upstream 503 from `kanban-api`.
 - `UPSTREAM_ERROR`: Non-parseable or unmapped HTTP error or response body exceeding 8 MiB.
+
+## Low-Context Workflow Tools (KAN-537)
+
+- `complete_work` accepts `identifier` (single) or `identifiers` (batch, max 25, deduped, mutually exclusive). `summary` (alias of `summary_markdown`) and `verification_proof` are optional: the server defaults the summary to "Completed via MCP" and always runs its workflow gate. A supplied proof is validated and accepts grades A, A- and A+. Batch calls return `{status: batch, completed, failed, results[]}`; each ticket is isolated so one failure never aborts the rest.
+- `transition_ticket(KEY, "Done")`: when the target is in the completed group the server answers USE_COMPLETE_WORK and the tool re-routes through the same `complete_work` gate. There is no gate bypass.
+- `begin_work` picks the started state via `_pick_started_state`: default state, then exact "In Progress", then the first non-idea state (Crazy_Ideas, Ideas are skipped), then lowest sort order.

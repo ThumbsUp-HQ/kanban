@@ -147,3 +147,80 @@ async def test_single_optional_passthrough() -> None:
     )
     assert res["status"] == "pending_agent_gate"
     assert c.calls[0][2]["fencing_token"] == 3
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        {},
+        {"identifier": 5, "to_state": "x"},
+        {"identifier": "", "to_state": "x"},
+        {"identifier": "K-1"},
+        {"identifier": "K-1", "to_state": ""},
+        {"identifier": "K-1", "to_state": "x" * 101},
+        {"identifier": "K-1", "to_state": "x", "comment_markdown": 1},
+        {"identifier": "K-1", "to_state": "x", "comment_markdown": "a" * 70000},
+        {"identifier": "K-1", "to_state": "x", "verification_proof": "p"},
+        {"identifier": "K-1", "to_state": "x", "verification_proof": {"bad": 1}},
+        {"identifier": "K-1", "to_state": "x", "fencing_token": "1"},
+        {"identifier": "K-1", "to_state": "x", "lease_action": "no"},
+    ],
+)
+async def test_transition_arg_validation(args: dict[str, Any]) -> None:
+    with pytest.raises(KbMcpError):
+        await transition_ticket(args, client=cast("Any", _Client()))
+
+
+async def test_transition_plain_and_gate_hold() -> None:
+    c = _Client({"/transition": {"key": "K-1", "state": {"name": "Review"}, "from_state": "Todo"}})
+    res = await transition_ticket(
+        {
+            "identifier": "K-1",
+            "to_state": "Review",
+            "comment_markdown": "c",
+            "fencing_token": 1,
+            "lease_action": "keep",
+        },
+        client=cast("Any", c),
+    )
+    assert res["status"] == "transitioned"
+    assert res["from_state"] == "Todo"
+    assert c.calls[0][2]["fencing_token"] == 1
+    held = _Client({"/transition": {"key": "K-1", "execution_id": "e", "active_agent": "a"}})
+    res = await transition_ticket({"identifier": "K-1", "to_state": "R"}, client=cast("Any", held))
+    assert res["status"] == "pending_agent_gate"
+    bad = _Client({"/transition": ["x"]})
+    with pytest.raises(KbMcpError):
+        await transition_ticket({"identifier": "K-1", "to_state": "R"}, client=cast("Any", bad))
+
+
+async def test_transition_invalid_options_and_route_extras() -> None:
+    inv = KbMcpError(McpErrorCode.INVALID_TRANSITION, "no", valid_options=["A", "B"])
+    with pytest.raises(KbMcpError) as ei:
+        await transition_ticket(
+            {"identifier": "K-1", "to_state": "Z"},
+            client=cast("Any", _Client({"/transition": inv})),
+        )
+    assert "A, B" in (ei.value.fix_hint or "")
+    c = _Client({"/transition": KbMcpError(McpErrorCode.USE_COMPLETE_WORK, "u")})
+    await transition_ticket(
+        {"identifier": "K-1", "to_state": "Done", "fencing_token": 2, "lease_action": "release"},
+        client=cast("Any", c),
+    )
+    assert c.calls[-1][2]["fencing_token"] == 2
+
+
+async def test_single_summary_secret_and_bad_report() -> None:
+    cl = cast("Any", _Client())
+    with pytest.raises(KbMcpError):
+        await complete_work(
+            {"identifier": "K-1", "summary": "NEEDS_WORK", "verification_proof": {}}, client=cl
+        )
+    with pytest.raises(KbMcpError):
+        await complete_work(
+            {
+                "identifier": "K-1",
+                "summary": "AKIAIOSFODNN7EXAMPLE secret_key=AKIAIOSFODNN7EXAMPLE",
+            },
+            client=cl,
+        )
