@@ -33,7 +33,6 @@ __all__ = [
 
 VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
     "type": "object",
-    "description": "Proof packet",
     "properties": {
         "qa_dir": {
             "type": "string",
