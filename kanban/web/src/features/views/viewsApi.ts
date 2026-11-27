@@ -8,6 +8,7 @@ export interface StateSummary {
   group: string;
   sort_order?: number;
   color_hex?: string | null;
+  is_default?: boolean;
 }
 
 export interface PrioritySummary {

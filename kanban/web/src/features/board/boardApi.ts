@@ -64,6 +64,7 @@ export interface BoardWorkflowState {
   wip_soft_limit?: number | null;
   wip_hard_limit?: number | null;
   color_hex?: string | null;
+  is_default?: boolean;
 }
 
 export interface FetchAllBoardIssuesOptions {

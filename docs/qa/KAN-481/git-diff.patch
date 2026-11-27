@@ -1,0 +1,289 @@
+diff --git a/kanban/web/src/features/board/boardApi.ts b/kanban/web/src/features/board/boardApi.ts
+index 80470d7b..cd90c93a 100644
+--- a/kanban/web/src/features/board/boardApi.ts
++++ b/kanban/web/src/features/board/boardApi.ts
+@@ -64,6 +64,7 @@ export interface BoardWorkflowState {
+   wip_soft_limit?: number | null;
+   wip_hard_limit?: number | null;
+   color_hex?: string | null;
++  is_default?: boolean;
+ }
+ 
+ export interface FetchAllBoardIssuesOptions {
+diff --git a/kanban/web/src/features/views/QuickCreateIssueModal.test.tsx b/kanban/web/src/features/views/QuickCreateIssueModal.test.tsx
+index 14ed6fe9..14e32cd3 100644
+--- a/kanban/web/src/features/views/QuickCreateIssueModal.test.tsx
++++ b/kanban/web/src/features/views/QuickCreateIssueModal.test.tsx
+@@ -984,6 +984,139 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
+         })
+       );
+     });
++  });
++
++  describe('Default Value Indications in Priority and Workflow State (KAN-481)', () => {
++    it('displays 🔹 Medium (Default) as priority option and defaults to medium selection', () => {
++      render(
++        <QuickCreateIssueModal
++          isOpen={true}
++          onClose={vi.fn()}
++          onCreate={vi.fn()}
++          projectKey="KAN"
++        />
++      );
++
++      const prioritySelect = screen.getByLabelText<HTMLSelectElement>(/^priority$/i);
++      expect(prioritySelect.value).toBe('medium');
++
++      const mediumOption = prioritySelect.querySelector('option[value="medium"]');
++      expect(mediumOption).not.toBeNull();
++      expect(mediumOption?.textContent).toBe('🔹 Medium (Default)');
++
++      // Other priority options do NOT have (Default)
++      const highOption = prioritySelect.querySelector('option[value="high"]');
++      expect(highOption?.textContent).toBe('⚡ High');
++      const urgentOption = prioritySelect.querySelector('option[value="urgent"]');
++      expect(urgentOption?.textContent).toBe('🔥 Urgent');
++      const lowOption = prioritySelect.querySelector('option[value="low"]');
++      expect(lowOption?.textContent).toBe('🔽 Low');
++      const noneOption = prioritySelect.querySelector('option[value="none"]');
++      expect(noneOption?.textContent).toBe('➖ None');
++    });
++
++    it('appends (Default) to the state marked is_default in states list and omits from others', () => {
++      render(
++        <QuickCreateIssueModal
++          isOpen={true}
++          onClose={vi.fn()}
++          onCreate={vi.fn()}
++          projectKey="KAN"
++          states={[
++            { id: 'st-backlog', name: 'Backlog', group: 'backlog' },
++            { id: 'st-todo', name: 'Todo', group: 'unstarted', is_default: true },
++            { id: 'st-progress', name: 'In Progress', group: 'started' },
++            { id: 'st-done', name: 'Done', group: 'completed' },
++          ]}
++        />
++      );
++
++      const stateSelect = screen.getByLabelText<HTMLSelectElement>(/^state$/i);
++      expect(stateSelect.value).toBe('st-todo');
++
++      const defaultStateOption = stateSelect.querySelector('option[value="st-todo"]');
++      expect(defaultStateOption?.textContent).toBe('Todo (Default)');
++
++      const backlogOption = stateSelect.querySelector('option[value="st-backlog"]');
++      expect(backlogOption?.textContent).toBe('Backlog');
++
++      const progressOption = stateSelect.querySelector('option[value="st-progress"]');
++      expect(progressOption?.textContent).toBe('In Progress');
++
++      const doneOption = stateSelect.querySelector('option[value="st-done"]');
++      expect(doneOption?.textContent).toBe('Done');
++    });
++
++    it('displays Todo (Default) in fallback states list when states prop is omitted', () => {
++      render(
++        <QuickCreateIssueModal
++          isOpen={true}
++          onClose={vi.fn()}
++          onCreate={vi.fn()}
++          projectKey="KAN"
++        />
++      );
++
++      const stateSelect = screen.getByLabelText<HTMLSelectElement>(/^state$/i);
++      const todoOption = stateSelect.querySelector('option[value="state-todo"]');
++      expect(todoOption?.textContent).toBe('Todo (Default)');
++
++      const backlogOption = stateSelect.querySelector('option[value="state-backlog"]');
++      expect(backlogOption?.textContent).toBe('Backlog');
++    });
++
++    it('submits clean state name and priority slug when creating issue with default selections', () => {
++      const handleCreate = vi.fn();
++      render(
++        <QuickCreateIssueModal
++          isOpen={true}
++          onClose={vi.fn()}
++          onCreate={handleCreate}
++          projectKey="KAN"
++          states={[
++            { id: 'st-backlog', name: 'Backlog', group: 'backlog' },
++            { id: 'st-ready', name: 'Ready for Dev', group: 'unstarted', is_default: true },
++          ]}
++        />
++      );
++
++      fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'Default values submit task' } });
++      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++
++      expect(handleCreate).toHaveBeenCalledWith(
++        expect.objectContaining({
++          summary: 'Default values submit task',
++          state: expect.objectContaining({
++            id: 'st-ready',
++            name: 'Ready for Dev',
++          }) as unknown as Record<string, unknown>,
++          priority: expect.objectContaining({
++            slug: 'medium',
++            label: 'Medium',
++            emoji: '🔹',
++          }) as unknown as Record<string, unknown>,
++        })
++      );
++    });
++
++    it('renders draft row and responsive field container elements with expected classes', () => {
++      const { container } = render(
++        <QuickCreateIssueModal
++          isOpen={true}
++          onClose={vi.fn()}
++          onCreate={vi.fn()}
++          projectKey="KAN"
++        />
++      );
++
++      const draftRow = container.querySelector('.quick-create-draft-row');
++      expect(draftRow).not.toBeNull();
++      const draftLabel = container.querySelector('.quick-create-draft-label');
++      expect(draftLabel).not.toBeNull();
++
++      const rowFields = container.querySelector('.quick-create-row-fields');
++      expect(rowFields).not.toBeNull();
++    });
+ 
+     it('deactivates useFocusTrap when HelpDrawer is open in ShellPanelsProvider so focus is not stolen', async () => {
+       const unregister = registerShellPanel('help', () => (
+diff --git a/kanban/web/src/features/views/QuickCreateIssueModal.tsx b/kanban/web/src/features/views/QuickCreateIssueModal.tsx
+index fbeb0ae4..40c262d4 100644
+--- a/kanban/web/src/features/views/QuickCreateIssueModal.tsx
++++ b/kanban/web/src/features/views/QuickCreateIssueModal.tsx
+@@ -585,13 +585,13 @@ export function QuickCreateIssueModal({
+                 {states && states.length > 0 ? (
+                   states.map((s) => (
+                     <option key={s.id} value={s.id}>
+-                      {s.name}
++                      {s.name}{s.is_default ? ' (Default)' : ''}
+                     </option>
+                   ))
+                 ) : (
+                   <>
+                     <option value="state-backlog">Backlog</option>
+-                    <option value="state-todo">Todo</option>
++                    <option value="state-todo">Todo (Default)</option>
+                     <option value="state-in-progress">In Progress</option>
+                     <option value="state-in-review">In Review</option>
+                     <option value="state-done">Done</option>
+@@ -618,7 +618,7 @@ export function QuickCreateIssueModal({
+               >
+                 <option value="urgent">🔥 Urgent</option>
+                 <option value="high">⚡ High</option>
+-                <option value="medium">🔹 Medium</option>
++                <option value="medium">🔹 Medium (Default)</option>
+                 <option value="low">🔽 Low</option>
+                 <option value="none">➖ None</option>
+               </select>
+diff --git a/kanban/web/src/features/views/filterBulk.css b/kanban/web/src/features/views/filterBulk.css
+index 0fad3443..075e566b 100644
+--- a/kanban/web/src/features/views/filterBulk.css
++++ b/kanban/web/src/features/views/filterBulk.css
+@@ -845,6 +845,22 @@
+   opacity: 0.9;
+ }
+ 
++.quick-create-draft-row {
++  display: flex;
++  align-items: center;
++}
++
++.quick-create-draft-label {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  font-family: var(--font-sans);
++  font-size: 0.8125rem;
++  color: var(--fg-secondary);
++  cursor: pointer;
++  user-select: none;
++}
++
+ /* ==========================================================================
+    Responsive Adaptations (Mobile <= 767px)
+    ========================================================================== */
+@@ -882,11 +898,21 @@
+     height: 44px;
+   }
+ 
++  .quick-create-row-fields {
++    flex-direction: column;
++  }
++
+   .quick-create-header {
+     flex-wrap: wrap;
+     gap: var(--space-2, 8px);
+   }
+ 
++  .quick-create-btn-cancel,
++  .quick-create-btn-submit,
++  .quick-create-draft-label {
++    min-height: var(--tap-min, 44px);
++  }
++
+   .swimlane-board-grid {
+     overflow-x: auto;
+     width: 100%;
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index f631dd56..76dacc58 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -877,6 +877,11 @@ export function IssuesWorkspaceRoute({
+   // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
+   const boardStates: [BoardWorkflowState, ...BoardWorkflowState[]] = useMemo(() => {
+     if (projectStates.length > 0) {
++      const hasExplicitDefault = projectStates.some((s) => s.is_default === true);
++      const defaultCandidateIndex = hasExplicitDefault
++        ? -1
++        : projectStates.findIndex((s) => normalizeStateKey(s.name) === 'todo' || s.group === 'unstarted');
++
+       return projectStates.map((s, idx) => {
+         const sAny = s as {
+           wip_hard_limit?: number | null;
+@@ -886,6 +891,9 @@ export function IssuesWorkspaceRoute({
+         };
+         const wipHard = sAny.wip_hard_limit ?? sAny.wip_hard ?? (s.id === 'state-in-review' ? 3 : undefined);
+         const wipSoft = sAny.wip_soft_limit ?? sAny.wip_soft ?? (s.id === 'state-in-progress' ? 3 : undefined);
++        const isDefault =
++          s.is_default === true ||
++          (!hasExplicitDefault && (idx === defaultCandidateIndex || (defaultCandidateIndex === -1 && idx === 0)));
+         return {
+           id: s.id,
+           name: normalizeStateKey(s.name) === 'todo' ? 'Todo' : s.name,
+@@ -894,6 +902,7 @@ export function IssuesWorkspaceRoute({
+             : 'unstarted') as BoardWorkflowState['group'],
+           sort_order: s.sort_order ?? idx + 1,
+           color_hex: s.color_hex ?? null,
++          ...(isDefault ? { is_default: true } : (s.is_default === false ? { is_default: false } : {})),
+           ...(wipHard != null ? { wip_hard_limit: wipHard } : {}),
+           ...(wipSoft != null ? { wip_soft_limit: wipSoft } : {}),
+         };
+@@ -901,7 +910,7 @@ export function IssuesWorkspaceRoute({
+     }
+     return [
+       { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
+-      { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 2 },
++      { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 2, is_default: true },
+       { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 3, wip_soft_limit: 3 },
+       { id: 'state-in-review', name: 'In Review', group: 'started', sort_order: 4, wip_hard_limit: 3 },
+       { id: 'state-done', name: 'Done', group: 'completed', sort_order: 5 },
+diff --git a/kanban/web/src/features/views/viewsApi.ts b/kanban/web/src/features/views/viewsApi.ts
+index bbd5bcd7..5bfb8232 100644
+--- a/kanban/web/src/features/views/viewsApi.ts
++++ b/kanban/web/src/features/views/viewsApi.ts
+@@ -8,6 +8,7 @@ export interface StateSummary {
+   group: string;
+   sort_order?: number;
+   color_hex?: string | null;
++  is_default?: boolean;
+ }
+ 
+ export interface PrioritySummary {

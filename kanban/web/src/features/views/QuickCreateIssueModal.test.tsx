@@ -984,6 +984,139 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
         })
       );
     });
+  });
+
+  describe('Default Value Indications in Priority and Workflow State (KAN-481)', () => {
+    it('displays 🔹 Medium (Default) as priority option and defaults to medium selection', () => {
+      render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+        />
+      );
+
+      const prioritySelect = screen.getByLabelText<HTMLSelectElement>(/^priority$/i);
+      expect(prioritySelect.value).toBe('medium');
+
+      const mediumOption = prioritySelect.querySelector('option[value="medium"]');
+      expect(mediumOption).not.toBeNull();
+      expect(mediumOption?.textContent).toBe('🔹 Medium (Default)');
+
+      // Other priority options do NOT have (Default)
+      const highOption = prioritySelect.querySelector('option[value="high"]');
+      expect(highOption?.textContent).toBe('⚡ High');
+      const urgentOption = prioritySelect.querySelector('option[value="urgent"]');
+      expect(urgentOption?.textContent).toBe('🔥 Urgent');
+      const lowOption = prioritySelect.querySelector('option[value="low"]');
+      expect(lowOption?.textContent).toBe('🔽 Low');
+      const noneOption = prioritySelect.querySelector('option[value="none"]');
+      expect(noneOption?.textContent).toBe('➖ None');
+    });
+
+    it('appends (Default) to the state marked is_default in states list and omits from others', () => {
+      render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+          states={[
+            { id: 'st-backlog', name: 'Backlog', group: 'backlog' },
+            { id: 'st-todo', name: 'Todo', group: 'unstarted', is_default: true },
+            { id: 'st-progress', name: 'In Progress', group: 'started' },
+            { id: 'st-done', name: 'Done', group: 'completed' },
+          ]}
+        />
+      );
+
+      const stateSelect = screen.getByLabelText<HTMLSelectElement>(/^state$/i);
+      expect(stateSelect.value).toBe('st-todo');
+
+      const defaultStateOption = stateSelect.querySelector('option[value="st-todo"]');
+      expect(defaultStateOption?.textContent).toBe('Todo (Default)');
+
+      const backlogOption = stateSelect.querySelector('option[value="st-backlog"]');
+      expect(backlogOption?.textContent).toBe('Backlog');
+
+      const progressOption = stateSelect.querySelector('option[value="st-progress"]');
+      expect(progressOption?.textContent).toBe('In Progress');
+
+      const doneOption = stateSelect.querySelector('option[value="st-done"]');
+      expect(doneOption?.textContent).toBe('Done');
+    });
+
+    it('displays Todo (Default) in fallback states list when states prop is omitted', () => {
+      render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+        />
+      );
+
+      const stateSelect = screen.getByLabelText<HTMLSelectElement>(/^state$/i);
+      const todoOption = stateSelect.querySelector('option[value="state-todo"]');
+      expect(todoOption?.textContent).toBe('Todo (Default)');
+
+      const backlogOption = stateSelect.querySelector('option[value="state-backlog"]');
+      expect(backlogOption?.textContent).toBe('Backlog');
+    });
+
+    it('submits clean state name and priority slug when creating issue with default selections', () => {
+      const handleCreate = vi.fn();
+      render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={handleCreate}
+          projectKey="KAN"
+          states={[
+            { id: 'st-backlog', name: 'Backlog', group: 'backlog' },
+            { id: 'st-ready', name: 'Ready for Dev', group: 'unstarted', is_default: true },
+          ]}
+        />
+      );
+
+      fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'Default values submit task' } });
+      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+      expect(handleCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          summary: 'Default values submit task',
+          state: expect.objectContaining({
+            id: 'st-ready',
+            name: 'Ready for Dev',
+          }) as unknown as Record<string, unknown>,
+          priority: expect.objectContaining({
+            slug: 'medium',
+            label: 'Medium',
+            emoji: '🔹',
+          }) as unknown as Record<string, unknown>,
+        })
+      );
+    });
+
+    it('renders draft row and responsive field container elements with expected classes', () => {
+      const { container } = render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+        />
+      );
+
+      const draftRow = container.querySelector('.quick-create-draft-row');
+      expect(draftRow).not.toBeNull();
+      const draftLabel = container.querySelector('.quick-create-draft-label');
+      expect(draftLabel).not.toBeNull();
+
+      const rowFields = container.querySelector('.quick-create-row-fields');
+      expect(rowFields).not.toBeNull();
+    });
 
     it('deactivates useFocusTrap when HelpDrawer is open in ShellPanelsProvider so focus is not stolen', async () => {
       const unregister = registerShellPanel('help', () => (

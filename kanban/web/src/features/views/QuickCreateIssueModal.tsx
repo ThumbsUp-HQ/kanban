@@ -585,13 +585,13 @@ export function QuickCreateIssueModal({
                 {states && states.length > 0 ? (
                   states.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name}
+                      {s.name}{s.is_default ? ' (Default)' : ''}
                     </option>
                   ))
                 ) : (
                   <>
                     <option value="state-backlog">Backlog</option>
-                    <option value="state-todo">Todo</option>
+                    <option value="state-todo">Todo (Default)</option>
                     <option value="state-in-progress">In Progress</option>
                     <option value="state-in-review">In Review</option>
                     <option value="state-done">Done</option>
@@ -618,7 +618,7 @@ export function QuickCreateIssueModal({
               >
                 <option value="urgent">🔥 Urgent</option>
                 <option value="high">⚡ High</option>
-                <option value="medium">🔹 Medium</option>
+                <option value="medium">🔹 Medium (Default)</option>
                 <option value="low">🔽 Low</option>
                 <option value="none">➖ None</option>
               </select>
