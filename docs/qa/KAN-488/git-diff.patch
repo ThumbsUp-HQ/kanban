@@ -1,0 +1,310 @@
+diff --git a/kanban/web/src/features/access/AccessInspectorPopover.css b/kanban/web/src/features/access/AccessInspectorPopover.css
+index 92cea975..ff9e361b 100644
+--- a/kanban/web/src/features/access/AccessInspectorPopover.css
++++ b/kanban/web/src/features/access/AccessInspectorPopover.css
+@@ -41,6 +41,27 @@
+     border-radius: 16px 16px 0 0 !important;
+     transform: none !important;
+   }
++
++  .access-inspector__btn {
++    min-height: var(--tap-min, 44px);
++  }
++
++  .access-inspector__kill-switch-btn {
++    min-height: var(--tap-min, 44px);
++    display: inline-flex;
++    align-items: center;
++  }
++
++  .access-inspector__kill-switch-confirm {
++    flex-direction: column;
++    align-items: stretch;
++    gap: var(--space-2, 8px);
++  }
++
++  .access-inspector__kill-switch-actions {
++    width: 100%;
++    justify-content: flex-end;
++  }
+ }
+ 
+ .access-inspector__header {
+@@ -281,13 +302,14 @@
+ }
+ 
+ .access-inspector__btn--danger {
+-  background-color: var(--danger-fg, #881337);
+-  color: #ffffff;
+-  border-color: var(--danger-fg, #881337);
++  background-color: var(--bg-danger);
++  color: var(--accent-primary-fg);
++  border-color: var(--bg-danger);
+ }
+ 
+ .access-inspector__btn--danger:hover {
+-  background-color: #4c0519;
++  background-color: var(--bg-danger-hover);
++  border-color: var(--bg-danger-hover);
+ }
+ 
+ .access-inspector__kill-switch-btn {
+@@ -310,6 +332,19 @@
+   cursor: not-allowed;
+ }
+ 
++.access-inspector__kill-switch-wrapper {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-1, 4px);
++}
++
++.access-inspector__kill-switch-prompt-row {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-1, 4px);
++  flex-wrap: wrap;
++}
++
+ .access-inspector__kill-switch-confirm {
+   display: flex;
+   align-items: center;
+@@ -319,6 +354,7 @@
+   background-color: var(--danger-bg, #ffe4e6);
+   border: 1px solid var(--danger-fg, #881337);
+   border-radius: 6px;
++  flex-wrap: wrap;
+ }
+ 
+ .access-inspector__kill-switch-prompt {
+diff --git a/kanban/web/src/features/access/AgentKillSwitchControl.test.tsx b/kanban/web/src/features/access/AgentKillSwitchControl.test.tsx
+index 4ea7af5f..56e165c8 100644
+--- a/kanban/web/src/features/access/AgentKillSwitchControl.test.tsx
++++ b/kanban/web/src/features/access/AgentKillSwitchControl.test.tsx
+@@ -1,6 +1,8 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+ import React from 'react';
++import fs from 'node:fs';
++import path from 'node:path';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { AgentKillSwitchControl } from './AgentKillSwitchControl';
+ import * as RealtimeModule from '../../api/RealtimeStatus';
+@@ -40,7 +42,7 @@ describe('AgentKillSwitchControl', () => {
+       kan142Data,
+     );
+ 
+-    const btn = screen.getByRole('button', { name: /kill switch/i });
++    const btn = screen.getByRole('button', { name: /^kill switch$/i });
+     expect(btn).toBeDefined();
+ 
+     fireEvent.click(btn);
+@@ -91,7 +93,7 @@ describe('AgentKillSwitchControl', () => {
+     );
+ 
+     // Open confirmation
+-    fireEvent.click(screen.getByRole('button', { name: /kill switch/i }));
++    fireEvent.click(screen.getByRole('button', { name: /^kill switch$/i }));
+ 
+     // Confirm
+     const confirmBtn = screen.getByRole('button', { name: /confirm kill switch/i });
+@@ -129,7 +131,7 @@ describe('AgentKillSwitchControl', () => {
+       kan142Data,
+     );
+ 
+-    fireEvent.click(screen.getByRole('button', { name: /kill switch/i }));
++    fireEvent.click(screen.getByRole('button', { name: /^kill switch$/i }));
+     fireEvent.click(screen.getByRole('button', { name: /confirm kill switch/i }));
+ 
+     await waitFor(() => {
+@@ -169,7 +171,7 @@ describe('AgentKillSwitchControl', () => {
+       />,
+     );
+ 
+-    fireEvent.click(screen.getByRole('button', { name: /kill switch/i }));
++    fireEvent.click(screen.getByRole('button', { name: /^kill switch$/i }));
+     expect(
+       screen.getByText(`Revoke all active agent grants on ${TEST_OBJECT_ID}?`),
+     ).toBeDefined();
+@@ -179,4 +181,110 @@ describe('AgentKillSwitchControl', () => {
+       expect(cookieSet).toContain('kb_csrf');
+     });
+   });
++
++  describe('KAN-488: FieldHelpHint and Shift-Left Invariants', () => {
++    it('renders FieldHelpHint adjacent to [ Kill Switch ] trigger without button or label nesting (HTML 4.10.4)', () => {
++      renderWithClient(
++        <AgentKillSwitchControl
++          objectId={TEST_OBJECT_ID}
++          canonicalKey="KAN-142"
++          agentsCount={2}
++        />,
++        kan142Data,
++      );
++
++      const hintTrigger = screen.getByTestId('hint-agent-kill-switch');
++      expect(hintTrigger).toBeDefined();
++
++      // Invariant 1: NEVER nest <FieldHelpHint> (<button>) inside <label> or another <button>!
++      expect(
++        document.querySelectorAll('label button.field-help-hint, button button.field-help-hint').length,
++      ).toBe(0);
++      expect(hintTrigger.closest('button.access-inspector__kill-switch-btn')).toBeNull();
++      expect(hintTrigger.closest('label')).toBeNull();
++
++      // Sibling structure inside wrapper
++      const wrapper = hintTrigger.closest('.access-inspector__kill-switch-wrapper');
++      expect(wrapper).not.toBeNull();
++      expect(wrapper?.querySelector('.access-inspector__kill-switch-btn')).toBeDefined();
++    });
++
++    it('opens FieldHelpHint popover on trigger, displaying security summary, default policy, and docHref wiki link', async () => {
++      renderWithClient(
++        <AgentKillSwitchControl
++          objectId={TEST_OBJECT_ID}
++          canonicalKey="KAN-142"
++          agentsCount={2}
++        />,
++        kan142Data,
++      );
++
++      const hintTrigger = screen.getByTestId('hint-agent-kill-switch');
++      fireEvent.focus(hintTrigger);
++
++      const popover = screen.getByTestId('hint-agent-kill-switch-popover');
++      expect(popover).toBeDefined();
++      expect(popover.textContent).toContain('Immediately revokes all active agent tokens and session grants on this object.');
++      expect(popover.textContent).toContain('Active grants retained until explicit revocation');
++
++      // Doc link
++      const docLink = screen.getByRole('link', { name: /more info/i });
++      expect(docLink.getAttribute('href')).toBe('/docs/zero-trust-security-and-access-visibility');
++
++      // Dismiss on Escape
++      fireEvent.keyDown(hintTrigger, { key: 'Escape' });
++      await waitFor(() => {
++        expect(screen.queryByTestId('hint-agent-kill-switch-popover')).toBeNull();
++      });
++    });
++
++    it('renders FieldHelpHint in confirmation prompt without HTML 4.10.4 nesting and allows popover interaction', async () => {
++      renderWithClient(
++        <AgentKillSwitchControl
++          objectId={TEST_OBJECT_ID}
++          canonicalKey="KAN-142"
++          agentsCount={2}
++        />,
++        kan142Data,
++      );
++
++      // Open confirm state
++      fireEvent.click(screen.getByRole('button', { name: /^kill switch$/i }));
++
++      const confirmHintTrigger = screen.getByTestId('hint-agent-kill-switch-confirm');
++      expect(confirmHintTrigger).toBeDefined();
++
++      // Invariant 1: HTML 4.10.4 compliance
++      expect(
++        document.querySelectorAll('label button.field-help-hint, button button.field-help-hint').length,
++      ).toBe(0);
++      expect(confirmHintTrigger.closest('button.access-inspector__btn')).toBeNull();
++      expect(confirmHintTrigger.closest('label')).toBeNull();
++
++      // Open popover from confirmation banner
++      fireEvent.focus(confirmHintTrigger);
++      const popover = screen.getByTestId('hint-agent-kill-switch-confirm-popover');
++      expect(popover).toBeDefined();
++      expect(popover.textContent).toContain('Immediately revokes all active agent tokens and session grants on this object.');
++
++      // Dismiss on Escape - confirmation prompt must remain active
++      fireEvent.keyDown(confirmHintTrigger, { key: 'Escape' });
++      await waitFor(() => {
++        expect(screen.queryByTestId('hint-agent-kill-switch-confirm-popover')).toBeNull();
++      });
++      expect(screen.getByText('Revoke all active agent grants on KAN-142?')).toBeDefined();
++    });
++
++    it('verifies zero inline style={{}} props and zero HTML 4.10.4 button/label nesting in static AST', () => {
++      const componentPath = path.resolve(__dirname, 'AgentKillSwitchControl.tsx');
++      const content = fs.readFileSync(componentPath, 'utf8');
++
++      // Zero inline styles
++      expect(content).not.toMatch(/style\s*=\s*\{\{/);
++
++      // Zero FieldHelpHint inside <label> or <button>
++      expect(content).not.toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*<FieldHelpHint/);
++      expect(content).not.toMatch(/<label[^>]*>(?:(?!<\/label>)[\s\S])*<FieldHelpHint/);
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/access/AgentKillSwitchControl.tsx b/kanban/web/src/features/access/AgentKillSwitchControl.tsx
+index 6934c6a7..b21b62e6 100644
+--- a/kanban/web/src/features/access/AgentKillSwitchControl.tsx
++++ b/kanban/web/src/features/access/AgentKillSwitchControl.tsx
+@@ -12,6 +12,7 @@ import React, {
+ import { useOptimisticMutation } from '../../api/optimistic';
+ import { apiFetch, getCsrfToken } from '../../api/client';
+ import { qk } from '../../api/queryKeys';
++import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import type { AccessManifest } from './types';
+ 
+ export interface AgentKillSwitchControlProps {
+@@ -89,9 +90,19 @@ export function AgentKillSwitchControl({
+         role="region"
+         aria-labelledby={titleId}
+       >
+-        <span id={titleId} className="access-inspector__kill-switch-prompt">
+-          Revoke all active agent grants on {targetLabel}?
+-        </span>
++        <div className="access-inspector__kill-switch-prompt-row">
++          <span id={titleId} className="access-inspector__kill-switch-prompt">
++            Revoke all active agent grants on {targetLabel}?
++          </span>
++          <FieldHelpHint
++            title="Agent Kill Switch Confirmation"
++            ariaLabel="Agent revocation confirmation security guide"
++            summary="Immediately revokes all active agent tokens and session grants on this object. Revocation is non-reversible without explicit administrator re-grant and is recorded in the immutable security audit ledger."
++            defaultValue="Active grants retained until explicit revocation"
++            docHref="/docs/zero-trust-security-and-access-visibility"
++            testId="hint-agent-kill-switch-confirm"
++          />
++        </div>
+         <div className="access-inspector__kill-switch-actions">
+           <button
+             type="button"
+@@ -116,15 +127,25 @@ export function AgentKillSwitchControl({
+   }
+ 
+   return (
+-    <button
+-      type="button"
+-      ref={killSwitchButtonRef}
+-      className="access-inspector__kill-switch-btn"
+-      onClick={handleOpenConfirm}
+-      disabled={agentsCount === 0 || mutation.isPending}
+-      aria-label="Kill Switch"
+-    >
+-      [ Kill Switch ]
+-    </button>
++    <div className="access-inspector__kill-switch-wrapper">
++      <button
++        type="button"
++        ref={killSwitchButtonRef}
++        className="access-inspector__kill-switch-btn"
++        onClick={handleOpenConfirm}
++        disabled={agentsCount === 0 || mutation.isPending}
++        aria-label="Kill Switch"
++      >
++        [ Kill Switch ]
++      </button>
++      <FieldHelpHint
++        title="Agent Kill Switch"
++        ariaLabel="Agent revocation security guide"
++        summary="Immediately revokes all active agent tokens and session grants on this object. Revocation is non-reversible without explicit administrator re-grant and is recorded in the immutable security audit ledger."
++        defaultValue="Active grants retained until explicit revocation"
++        docHref="/docs/zero-trust-security-and-access-visibility"
++        testId="hint-agent-kill-switch"
++      />
++    </div>
+   );
+ }

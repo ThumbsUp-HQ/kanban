@@ -41,6 +41,27 @@
     border-radius: 16px 16px 0 0 !important;
     transform: none !important;
   }
+
+  .access-inspector__btn {
+    min-height: var(--tap-min, 44px);
+  }
+
+  .access-inspector__kill-switch-btn {
+    min-height: var(--tap-min, 44px);
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .access-inspector__kill-switch-confirm {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2, 8px);
+  }
+
+  .access-inspector__kill-switch-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
 .access-inspector__header {
@@ -281,13 +302,14 @@
 }
 
 .access-inspector__btn--danger {
-  background-color: var(--danger-fg, #881337);
-  color: #ffffff;
-  border-color: var(--danger-fg, #881337);
+  background-color: var(--bg-danger);
+  color: var(--accent-primary-fg);
+  border-color: var(--bg-danger);
 }
 
 .access-inspector__btn--danger:hover {
-  background-color: #4c0519;
+  background-color: var(--bg-danger-hover);
+  border-color: var(--bg-danger-hover);
 }
 
 .access-inspector__kill-switch-btn {
@@ -310,6 +332,19 @@
   cursor: not-allowed;
 }
 
+.access-inspector__kill-switch-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+}
+
+.access-inspector__kill-switch-prompt-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  flex-wrap: wrap;
+}
+
 .access-inspector__kill-switch-confirm {
   display: flex;
   align-items: center;
@@ -319,6 +354,7 @@
   background-color: var(--danger-bg, #ffe4e6);
   border: 1px solid var(--danger-fg, #881337);
   border-radius: 6px;
+  flex-wrap: wrap;
 }
 
 .access-inspector__kill-switch-prompt {
