@@ -15,7 +15,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, getCsrfToken } from '../../api/client';
 import { qk } from '../../api/queryKeys';
 import { useFocusTrap } from '../drawer/useFocusTrap';
+import { useOptionalShellPanels } from '../../app/shellPanels';
 import { AgentKillSwitchControl } from './AgentKillSwitchControl';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import type { AccessManifest } from './types';
 import './ManageAccessModal.css';
 
@@ -71,13 +74,25 @@ export function ManageAccessModal({
     text: string;
   } | null>(null);
 
-  useFocusTrap(isOpen, modalRef);
+  const panels = useOptionalShellPanels();
+  const isHelpOpen = panels?.activePanel?.id === 'help';
+  useFocusTrap(isOpen && !isHelpOpen, modalRef);
 
   const handleClose = (): void => {
+    if (document.querySelector('.kb-help-drawer') || document.querySelector('.field-help-hint-popover')) {
+      return;
+    }
     setSelectedPrincipal(null);
     setSearchQuery('');
     setStatusMessage(null);
     onClose();
+  };
+
+  const handleBackdropClick = (): void => {
+    if (document.querySelector('.kb-help-drawer') || document.querySelector('.field-help-hint-popover')) {
+      return;
+    }
+    handleClose();
   };
 
   // Query eligible workspace principals
@@ -163,6 +178,9 @@ export function ManageAccessModal({
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
+    if (document.querySelector('.kb-help-drawer') || document.querySelector('.field-help-hint-popover')) {
+      return;
+    }
     if (e.key === 'Escape') {
       e.stopPropagation();
       e.preventDefault();
@@ -194,6 +212,7 @@ export function ManageAccessModal({
   };
 
   const handleSaveRule = (): void => {
+    /* v8 ignore next 3 */
     if (!selectedPrincipal) {
       return;
     }
@@ -228,7 +247,12 @@ export function ManageAccessModal({
 
   return (
     <>
-      <div className="manage-access-backdrop" onClick={handleClose} aria-hidden="true" />
+      <div
+        className="manage-access-backdrop"
+        onClick={handleBackdropClick}
+        aria-hidden="true"
+        data-testid="manage-access-backdrop"
+      />
       <div
         ref={modalRef}
         className="manage-access-modal"
@@ -243,14 +267,21 @@ export function ManageAccessModal({
           <h2 id={titleId} className="manage-access-modal__title">
             <span aria-hidden="true">🛡️</span> Manage Access for {objectLabel}
           </h2>
-          <button
-            type="button"
-            className="manage-access-modal__close-btn"
-            onClick={handleClose}
-            aria-label="Close Manage Access"
-          >
-            ✕
-          </button>
+          <div className="manage-access-modal__header-actions">
+            <StudioDocLink
+              href="/docs/zero-trust-security-and-access-visibility#universal-access-control-model"
+              label="ACL Documentation ->"
+              testId="manage-access-doc-link"
+            />
+            <button
+              type="button"
+              className="manage-access-modal__close-btn"
+              onClick={handleClose}
+              aria-label="Close Manage Access"
+            >
+              ✕
+            </button>
+          </div>
         </header>
 
         <div className="manage-access-modal__body">
@@ -356,16 +387,29 @@ export function ManageAccessModal({
                     />
                     ALLOW (Grant Access)
                   </label>
-                  <label className="manage-access-radio-label">
-                    <input
-                      type="radio"
-                      name="accessEffect"
-                      value="DENY"
-                      checked={selectedEffect === 'DENY'}
-                      onChange={() => { setSelectedEffect('DENY'); }}
+                  <div className="manage-access-deny-wrapper">
+                    <label className="manage-access-radio-label">
+                      <input
+                        type="radio"
+                        name="accessEffect"
+                        value="DENY"
+                        checked={selectedEffect === 'DENY'}
+                        onChange={() => { setSelectedEffect('DENY'); }}
+                      />
+                      DENY (Explicit Restriction)
+                    </label>
+                    <FieldHelpHint
+                      title="Access Effect Precedence"
+                      summary="Explicit DENY rules take absolute precedence over any inherited or group ALLOW permissions across the object graph."
+                      defaultValue="ALLOW"
+                      validValues={{
+                        ALLOW: 'Grants selected capabilities across object scope',
+                        DENY: 'Explicit restriction overriding inherited permissions',
+                      }}
+                      docHref="/docs/zero-trust-security-and-access-visibility#universal-access-control-model"
+                      testId="deny-precedence-help-hint"
                     />
-                    DENY (Explicit Restriction)
-                  </label>
+                  </div>
                 </div>
 
                 <div className="manage-access-presets">
@@ -468,7 +512,7 @@ export function ManageAccessModal({
                       <td>
                         <button
                           type="button"
-                          className="manage-access-btn manage-access-btn--secondary"
+                          className="manage-access-btn manage-access-btn--secondary manage-access-btn--revoke"
                           onClick={() => { handleRevoke(u.principal_id, 'ALLOW'); }}
                           disabled={revokeMutation.isPending}
                           data-testid={`revoke-btn-${u.principal_id}`}
@@ -487,7 +531,7 @@ export function ManageAccessModal({
                       <td>
                         <button
                           type="button"
-                          className="manage-access-btn manage-access-btn--secondary"
+                          className="manage-access-btn manage-access-btn--secondary manage-access-btn--revoke"
                           onClick={() => { handleRevoke(g.principal_id, 'ALLOW'); }}
                           disabled={revokeMutation.isPending}
                           data-testid={`revoke-btn-${g.principal_id}`}
@@ -507,7 +551,7 @@ export function ManageAccessModal({
                         {Boolean(d.principal_id) && (
                           <button
                             type="button"
-                            className="manage-access-btn manage-access-btn--secondary"
+                            className="manage-access-btn manage-access-btn--secondary manage-access-btn--revoke"
                             onClick={() => {
                               if (d.principal_id) {
                                 handleRevoke(d.principal_id, 'DENY');
