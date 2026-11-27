@@ -75,7 +75,6 @@ describe('KANBA-226 Accessibility & WCAG 2.2 AA Conformance Suite', () => {
 
       // Find focusable elements
       const docLink = screen.getByTestId('quick-create-doc-link');
-      const closeBtn = screen.getByRole('button', { name: 'Close modal' });
       const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
 
       // Focus last focusable (cancel button) and press Tab -> cycles to first focusable (docLink)
