@@ -325,6 +325,7 @@ class InAppSdkHarness:
                     max_output_tokens=DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS,
                     ttft_deadline_ms=cutoff_ms,
                     metadata=metadata,
+                    think=False,
                 )
             )
             p_tok += resp.prompt_tokens
