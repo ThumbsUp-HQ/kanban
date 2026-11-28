@@ -23,6 +23,7 @@ from kanban.repos.mirror import (
     ExecGitCommandRunner,
     FakeGitCommandRunner,
     GitResult,
+    MirrorManager,
     MirrorPolicy,
 )
 
@@ -65,7 +66,7 @@ async def test_resolve_repo_context_success() -> None:
     assert context.access == "read-only"
     assert context.head_commit == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
     assert context.access_mode == "ro"
-    assert str(binding.mirror_path) == context.mirror_path
+    assert str(MirrorManager().mirror_path(binding)) == context.mirror_path
 
     argv, env = fake_runner.calls[0]
     assert "rev-parse" in argv
@@ -146,7 +147,6 @@ def test_resolve_repo_context_real_git(tmp_path: Path) -> None:
 
     # Mock mirror_path property on binding
     class MockBinding:
-        mirror_path = repo_dir / ".git"
         default_ref = "main"
         access_mode = "ro"
 
@@ -156,6 +156,7 @@ def test_resolve_repo_context_real_git(tmp_path: Path) -> None:
     context = asyncio.run(
         resolve_repo_context(
             MockBinding(),  # type: ignore[arg-type]
+            mirror_path_override=repo_dir / ".git",
             policy=policy,
             runner=runner,
         )

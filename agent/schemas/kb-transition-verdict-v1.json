@@ -30,44 +30,6 @@
   "additionalProperties": false,
   "description": "Schema-validated verdict returned by an AI transition gate.",
   "properties": {
-    "schema": {
-      "const": "kb-transition-verdict/v1",
-      "default": "kb-transition-verdict/v1",
-      "title": "Schema",
-      "type": "string"
-    },
-    "nonce": {
-      "maxLength": 64,
-      "minLength": 16,
-      "title": "Nonce",
-      "type": "string"
-    },
-    "decision": {
-      "enum": [
-        "approve",
-        "reject"
-      ],
-      "title": "Decision",
-      "type": "string"
-    },
-    "reason_markdown": {
-      "maxLength": 16384,
-      "minLength": 1,
-      "title": "Reason Markdown",
-      "type": "string"
-    },
-    "cited_files": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Cited Files",
-      "type": "array"
-    },
-    "field_updates": {
-      "additionalProperties": true,
-      "title": "Field Updates",
-      "type": "object"
-    },
     "add_labels": {
       "items": {
         "type": "string"
@@ -83,6 +45,67 @@
       "maxItems": 10,
       "title": "Add Links",
       "type": "array"
+    },
+    "cited_files": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Cited Files",
+      "type": "array"
+    },
+    "decision": {
+      "enum": [
+        "approve",
+        "reject"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "field_updates": {
+      "additionalProperties": true,
+      "title": "Field Updates",
+      "type": "object"
+    },
+    "grade": {
+      "anyOf": [
+        {
+          "enum": [
+            "A+",
+            "A",
+            "A-",
+            "B+",
+            "B",
+            "B-",
+            "C+",
+            "C",
+            "F"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Grade"
+    },
+    "nonce": {
+      "maxLength": 64,
+      "minLength": 16,
+      "title": "Nonce",
+      "type": "string"
+    },
+    "reason_markdown": {
+      "maxLength": 16384,
+      "minLength": 1,
+      "title": "Reason Markdown",
+      "type": "string"
+    },
+    "schema": {
+      "const": "kb-transition-verdict/v1",
+      "default": "kb-transition-verdict/v1",
+      "title": "Schema",
+      "type": "string"
     }
   },
   "required": [

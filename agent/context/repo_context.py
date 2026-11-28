@@ -98,7 +98,7 @@ async def resolve_repo_context(  # noqa: PLR0913
     elif active_mgr is not None:
         mirror_path = active_mgr.mirror_path(binding)
     else:
-        mirror_path = binding.mirror_path
+        mirror_path = MirrorManager().mirror_path(binding)
     allow_file = git_policy.allow_file_protocol
 
     argv = [

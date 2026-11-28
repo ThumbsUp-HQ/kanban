@@ -85,10 +85,14 @@ def test_mirror_manager_default_base_dir(tmp_path: Path, monkeypatch: pytest.Mon
     assert mgr.base_dir == mirror_dir
 
 
+def _mirror_path(binding: ProjectRepoBinding) -> Path:
+    return resolve_mirror_base_dir() / str(binding.workspace_id) / f"{binding.id}.git"
+
+
 def test_project_repo_binding_mirror_path_with_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """ProjectRepoBinding.mirror_path reflects KANBAN_REPO_MIRROR_DIR and KB_DATA_DIR."""
+    """Mirror path layout reflects KANBAN_REPO_MIRROR_DIR and KB_DATA_DIR."""
     ws_id = uuid.uuid4()
     binding_id = uuid.uuid4()
     binding = ProjectRepoBinding(
@@ -101,16 +105,16 @@ def test_project_repo_binding_mirror_path_with_env(
     )
 
     monkeypatch.setenv("KANBAN_REPO_MIRROR_DIR", str(tmp_path / "custom-git"))
-    assert binding.mirror_path == tmp_path / "custom-git" / str(ws_id) / f"{binding_id}.git"
+    assert _mirror_path(binding) == tmp_path / "custom-git" / str(ws_id) / f"{binding_id}.git"
 
     monkeypatch.delenv("KANBAN_REPO_MIRROR_DIR")
     monkeypatch.setenv("KB_DATA_DIR", str(tmp_path / "kbdata"))
-    assert binding.mirror_path == (
+    assert _mirror_path(binding) == (
         tmp_path / "kbdata" / "git-mirrors" / str(ws_id) / f"{binding_id}.git"
     )
 
     monkeypatch.delenv("KB_DATA_DIR")
-    assert binding.mirror_path == (resolve_mirror_base_dir() / str(ws_id) / f"{binding_id}.git")
+    assert _mirror_path(binding) == (resolve_mirror_base_dir() / str(ws_id) / f"{binding_id}.git")
 
 
 @pytest.mark.asyncio

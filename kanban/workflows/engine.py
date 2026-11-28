@@ -11,6 +11,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Protocol
 
 from sqlalchemy import or_, select, text
@@ -26,6 +27,7 @@ from database.models.workflow import (
 )
 from kanban.api.problems import ProblemException, not_found
 from kanban.content.normalize import normalize_to_markdown
+from kanban.repos.mirror import resolve_mirror_base_dir
 from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError, WasmRunLimits
 from kanban.security.granular_permissions import GranularPermission, require_permissions
 from kanban.security.permissions import Capability, evaluate_capabilities
@@ -1020,7 +1022,9 @@ class TransitionEngine:
                     )
 
                 sig_res = await verify_commit_signature(
-                    repo_binding.mirror_path,
+                    Path(
+                        f"{resolve_mirror_base_dir()}/{repo_binding.workspace_id}/{repo_binding.id}.git"
+                    ),
                     str(commit_sha),
                     ssh_allowed_signers=repo_binding.ssh_allowed_signers,
                     gpg_trusted_armored_keys=repo_binding.gpg_trusted_armored_keys,

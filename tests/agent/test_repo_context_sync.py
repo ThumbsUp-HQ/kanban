@@ -64,8 +64,7 @@ def _git(cwd: Path, *args: str) -> str:
 def test_mirror_path_unified(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("KANBAN_REPO_MIRROR_DIR", str(tmp_path / "m"))
     b = ProjectRepoBinding(id=uuid.uuid4(), workspace_id=uuid.uuid4())
-    assert b.mirror_path == MirrorManager().mirror_path(b)
-    assert b.mirror_path.is_relative_to(resolve_mirror_base_dir())
+    assert MirrorManager().mirror_path(b).is_relative_to(resolve_mirror_base_dir())
 
 
 def test_mirror_path_unified_when_default_unwritable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -73,7 +72,7 @@ def test_mirror_path_unified_when_default_unwritable(monkeypatch: pytest.MonkeyP
     monkeypatch.delenv("KANBAN_GIT_MIRRORS_DIR", raising=False)
     monkeypatch.delenv("KB_DATA_DIR", raising=False)
     b = ProjectRepoBinding(id=uuid.uuid4(), workspace_id=uuid.uuid4())
-    assert b.mirror_path == MirrorManager().mirror_path(b)
+    assert MirrorManager().mirror_path(b).is_relative_to(resolve_mirror_base_dir())
 
 
 def test_base_argv_disables_redirects() -> None:

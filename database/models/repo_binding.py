@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import uuid  # noqa: TC003
 from datetime import datetime  # noqa: TC003
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import (
@@ -98,14 +97,6 @@ class ProjectRepoBinding(Base):
         back_populates="repo_binding",
         cascade="all, delete-orphan",
     )
-
-    @property
-    def mirror_path(self) -> Path:
-        """Derived filesystem path for the bare mirror repository."""
-        from kanban.repos.mirror import resolve_mirror_base_dir  # noqa: PLC0415
-
-        base = resolve_mirror_base_dir()
-        return Path(f"{base}/{self.workspace_id}/{self.id}.git")
 
 
 class CommitAttestation(Base):
