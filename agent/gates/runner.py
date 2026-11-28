@@ -8,6 +8,7 @@ import asyncio
 import contextlib
 import datetime as dt
 import logging
+import os
 import uuid
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -25,6 +26,7 @@ from database.models.workflow import (
     WorkflowTransitionHook,
 )
 from database.session import RLSContext, RLSSessionFactory
+from kanban.security.scrubber import scrub_text
 from kanban.workflows.async_gate import GateCoordinator
 from kanban.workflows.gate_types import resolve_effective_gate_timeout_ms
 
@@ -80,12 +82,34 @@ async def _load_repo_context(session: Any, project_id: uuid.UUID) -> RepoContext
         return None
     from agent.context.repo_context import resolve_repo_context  # noqa: PLC0415
     from agent.context.transition_context import RepoContext as _RepoContext  # noqa: PLC0415
+    from database.models.workspace_settings import WorkspaceSettings  # noqa: PLC0415
+    from kanban.repos.mirror import MirrorManager, MirrorPolicy  # noqa: PLC0415
 
+    settings = (
+        await session.execute(
+            select(WorkspaceSettings).where(WorkspaceSettings.workspace_id == binding.workspace_id)
+        )
+    ).scalar_one_or_none()
+    air_gap = bool(getattr(settings, "air_gap_mode", False))
+    allow_file = os.environ.get("KANBAN_ALLOW_FILE_PROTOCOL_MIRRORS") == "1"
+    mgr = MirrorManager(policy=MirrorPolicy(allow_file_protocol=allow_file))
     try:
-        resolved = await resolve_repo_context(binding)
+        resolved = await resolve_repo_context(
+            binding,
+            sync=True,
+            mirror_manager=mgr,
+            policy=MirrorPolicy(allow_file_protocol=allow_file),
+            air_gap_mode=air_gap,
+        )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Repo context unavailable for project %s: %s", project_id, exc)
+        logger.warning(
+            "Repo context unavailable for project %s: %s", project_id, scrub_text(str(exc))
+        )
+        with contextlib.suppress(Exception):
+            await session.flush()
         return None
+    with contextlib.suppress(Exception):
+        await session.flush()
     return _RepoContext(head_commit=resolved.head_commit, mirror_path=resolved.mirror_path)
 
 
@@ -350,7 +374,9 @@ class GateWorkerRunner:
             if issue is not None:
                 issue_dict["comments"] = await _load_issue_comments(session, issue.id)
             repo_ctx = (
-                await _load_repo_context(session, execution.project_id) if execution else None
+                await _load_repo_context(session, execution.project_id)
+                if execution and agent_def and agent_def.repo_access_mode != "none"
+                else None
             )
             base_timeout = resolve_effective_gate_timeout_ms(
                 hook_timeout_ms=hook.timeout_ms if hook else None,
@@ -505,19 +531,12 @@ class GateWorkerRunner:
 
                         if live_provider is not None:
                             from agent.budget import BudgetEnforcer  # noqa: PLC0415
-                            from agent.harnesses.in_app_sdk import InAppSdkHarness  # noqa: PLC0415
 
                             budget_enforcer = BudgetEnforcer(
                                 session_factory=self.session_factory,
                                 rls_context=admin_ctx,
                             )
-                            live_harness = InAppSdkHarness(
-                                provider=live_provider,
-                                budget_enforcer=budget_enforcer,
-                                session_factory=self.session_factory,
-                                rls_context=admin_ctx,
-                            )
-                            self.registry.register("in_app_sdk", live_harness)
+                            agent_dict["budget_enforcer"] = budget_enforcer
                             agent_dict["provider"] = live_provider
                             agent_dict["provider_config_id"] = provider_row.id
                             agent_dict["workspace_id"] = ws_id

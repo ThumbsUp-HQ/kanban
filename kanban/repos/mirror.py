@@ -25,6 +25,7 @@ from kanban.security.envelope import (
     SealedSecret,
     open_bound,
 )
+from kanban.security.scrubber import scrub_text
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -108,6 +109,9 @@ _DEFAULT_BASE_DIR: Final[Path] = Path(
     or (f"{os.environ['KB_DATA_DIR']}/git-mirrors" if "KB_DATA_DIR" in os.environ else None)
     or "/var/lib/kanban/git-mirrors"
 )
+
+
+_MIRROR_LOCKS: dict[tuple[str, str], asyncio.Lock] = {}
 
 
 class GitResult(NamedTuple):
@@ -249,6 +253,8 @@ class MirrorManager:
         return [
             "git",
             "-c",
+            "http.followRedirects=false",
+            "-c",
             "core.hooksPath=/dev/null",
             "-c",
             f"protocol.file.allow={'always' if allow_file else 'never'}",
@@ -284,7 +290,28 @@ class MirrorManager:
                 total += entry.stat().st_size
         return total
 
-    async def clone_or_fetch(  # noqa: C901, PLR0912, PLR0915
+    async def clone_or_fetch(
+        self,
+        binding: ProjectRepoBinding,
+        *,
+        allowed_git_cidrs: Sequence[str] | None = None,
+        air_gap_mode: bool = False,
+        pinned_ip: str | None = None,
+        resolver: Callable[[str], list[str]] | None = None,
+    ) -> None:
+        """Serialize clone/fetch per mirror via an asyncio.Lock, then run it."""
+        key = (str(binding.workspace_id), str(binding.id))
+        lock = _MIRROR_LOCKS.setdefault(key, asyncio.Lock())
+        async with lock:
+            await self._clone_or_fetch_locked(
+                binding,
+                allowed_git_cidrs=allowed_git_cidrs,
+                air_gap_mode=air_gap_mode,
+                pinned_ip=pinned_ip,
+                resolver=resolver,
+            )
+
+    async def _clone_or_fetch_locked(  # noqa: C901, PLR0912, PLR0915
         self,
         binding: ProjectRepoBinding,
         *,
@@ -335,7 +362,7 @@ class MirrorManager:
                 aad = f"kanban/repo-binding/v1|{binding.id}|{binding.project_id}".encode()
                 decrypted_ba = open_bound(sealed, aad, self.kek_provider)
             except (EnvelopeDecryptError, Exception) as exc:
-                binding.last_fetch_error = f"CREDENTIAL_DECRYPT_FAILED: {exc}"
+                binding.last_fetch_error = scrub_text(f"CREDENTIAL_DECRYPT_FAILED: {exc}")
                 raise
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -388,6 +415,7 @@ class MirrorManager:
                 env = self._build_env(tmp_dir)
                 is_existing_mirror = (target_path / "HEAD").exists()
 
+                fetch_url = validated.normalized_url if validated else binding.remote_url
                 if is_existing_mirror:
                     argv = [
                         *self._build_base_argv(),
@@ -396,7 +424,9 @@ class MirrorManager:
                         "fetch",
                         "--prune",
                         "--no-tags",
-                        "origin",
+                        "--",
+                        fetch_url,
+                        "+refs/*:refs/*",
                     ]
                 else:
                     remote_url = validated.normalized_url if validated else binding.remote_url
@@ -422,8 +452,8 @@ class MirrorManager:
 
                 if res.returncode != 0:
                     err_snip = res.stderr.strip()[:200]
-                    binding.last_fetch_error = f"GIT_EXIT_{res.returncode}: {err_snip}"
-                    msg_err = f"Git command failed: {res.stderr.strip()}"
+                    binding.last_fetch_error = scrub_text(f"GIT_EXIT_{res.returncode}: {err_snip}")
+                    msg_err = scrub_text(f"Git command failed: {res.stderr.strip()}")
                     raise GitExecutionError(msg_err)
 
                 # 2 GiB mirror size enforcement

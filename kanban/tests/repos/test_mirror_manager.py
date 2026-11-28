@@ -144,7 +144,8 @@ async def test_fetch_called_when_mirror_head_exists(tmp_path: Path) -> None:
     assert "fetch" in fetch_argv
     assert "--prune" in fetch_argv
     assert "--no-tags" in fetch_argv
-    assert "origin" in fetch_argv
+    assert "https://github.com/org/repo.git" in fetch_argv
+    assert "http.followRedirects=false" in fetch_argv
     assert f"--git-dir={mirror_dir}" in fetch_argv
 
 

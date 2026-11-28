@@ -1,0 +1,374 @@
+diff --git a/agent/context/repo_context.py b/agent/context/repo_context.py
+index 993c8e44..4d8c3204 100644
+--- a/agent/context/repo_context.py
++++ b/agent/context/repo_context.py
+@@ -6,17 +6,21 @@ from __future__ import annotations
+ 
+ import re
+ import tempfile
+-from typing import TYPE_CHECKING, Literal
++from pathlib import Path
++from typing import TYPE_CHECKING, Any, Literal
+ 
+ from pydantic import BaseModel, ConfigDict
+ 
+ from kanban.repos.mirror import (
+     ExecGitCommandRunner,
+     GitCommandRunner,
++    MirrorManager,
+     MirrorPolicy,
+ )
+ 
+ if TYPE_CHECKING:
++    from collections.abc import Sequence
++
+     from database.models.repo_binding import ProjectRepoBinding
+ 
+ __all__ = [
+@@ -29,6 +33,16 @@ __all__ = [
+ _COMMIT_HEX_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
+ 
+ 
++_BAD_REF_RE = re.compile(r"[\x00-\x20\x7f]")
++
++
++def _validate_target_ref(ref: str) -> None:
++    """Reject hostile refs before any git process is spawned."""
++    if not ref or _BAD_REF_RE.search(ref) or ".." in ref or ref.startswith("-") or "@{" in ref:
++        msg = "Invalid target ref"
++        raise RepoContextResolutionError(msg)
++
++
+ class RepoContextResolutionError(ValueError):
+     """Raised when git rev-parse fails to resolve the requested ref."""
+ 
+@@ -49,24 +63,49 @@ class RepoContext(BaseModel):
+     access_mode: str
+ 
+ 
+-async def resolve_repo_context(
++async def resolve_repo_context(  # noqa: PLR0913
+     binding: ProjectRepoBinding,
+     ref: str | None = None,
+     *,
+     runner: GitCommandRunner | None = None,
+     policy: MirrorPolicy | None = None,
++    sync: bool = False,
++    mirror_manager: MirrorManager | None = None,
++    mirror_path_override: Path | str | None = None,
++    allowed_git_cidrs: Sequence[str] | None = None,
++    air_gap_mode: bool = False,
++    kek_provider: Any = None,  # noqa: ANN401
+ ) -> RepoContext:
+     """Resolve repository head commit and build read-only RepoContext for agent execution."""
+     target_ref = ref if ref and ref.strip() else binding.default_ref
+     git_runner = runner or ExecGitCommandRunner()
+     git_policy = policy or MirrorPolicy(allow_file_protocol=False)
+ 
+-    mirror_path = binding.mirror_path
++    _validate_target_ref(target_ref)
++
++    active_mgr = mirror_manager
++    if sync:
++        if active_mgr is None:
++            active_mgr = MirrorManager(
++                policy=git_policy, runner=git_runner, kek_provider=kek_provider
++            )
++        await active_mgr.clone_or_fetch(
++            binding, allowed_git_cidrs=allowed_git_cidrs, air_gap_mode=air_gap_mode
++        )
++
++    if mirror_path_override is not None:
++        mirror_path = Path(mirror_path_override)
++    elif active_mgr is not None:
++        mirror_path = active_mgr.mirror_path(binding)
++    else:
++        mirror_path = binding.mirror_path
+     allow_file = git_policy.allow_file_protocol
+ 
+     argv = [
+         "git",
+         "-c",
++        "protocol.allow=never",
++        "-c",
+         "core.hooksPath=/dev/null",
+         "-c",
+         f"protocol.file.allow={'always' if allow_file else 'never'}",
+@@ -89,7 +128,7 @@ async def resolve_repo_context(
+         "GIT_CONFIG_NOSYSTEM": "1",
+         "GIT_CONFIG_GLOBAL": "/dev/null",
+         "GIT_TERMINAL_PROMPT": "0",
+-        "GIT_ALLOW_PROTOCOL": "https:ssh:file" if allow_file else "https:ssh",
++        "GIT_ALLOW_PROTOCOL": "",
+         "HOME": tempfile.gettempdir(),
+         "PATH": "/usr/bin:/bin",
+     }
+diff --git a/agent/gates/runner.py b/agent/gates/runner.py
+index 6acea083..d0dba413 100644
+--- a/agent/gates/runner.py
++++ b/agent/gates/runner.py
+@@ -8,6 +8,7 @@ import asyncio
+ import contextlib
+ import datetime as dt
+ import logging
++import os
+ import uuid
+ from typing import TYPE_CHECKING, Any, Literal
+ 
+@@ -25,6 +26,7 @@ from database.models.workflow import (
+     WorkflowTransitionHook,
+ )
+ from database.session import RLSContext, RLSSessionFactory
++from kanban.security.scrubber import scrub_text
+ from kanban.workflows.async_gate import GateCoordinator
+ from kanban.workflows.gate_types import resolve_effective_gate_timeout_ms
+ 
+@@ -80,12 +82,34 @@ async def _load_repo_context(session: Any, project_id: uuid.UUID) -> RepoContext
+         return None
+     from agent.context.repo_context import resolve_repo_context  # noqa: PLC0415
+     from agent.context.transition_context import RepoContext as _RepoContext  # noqa: PLC0415
++    from database.models.workspace_settings import WorkspaceSettings  # noqa: PLC0415
++    from kanban.repos.mirror import MirrorManager, MirrorPolicy  # noqa: PLC0415
+ 
++    settings = (
++        await session.execute(
++            select(WorkspaceSettings).where(WorkspaceSettings.workspace_id == binding.workspace_id)
++        )
++    ).scalar_one_or_none()
++    air_gap = bool(getattr(settings, "air_gap_mode", False))
++    allow_file = os.environ.get("KANBAN_ALLOW_FILE_PROTOCOL_MIRRORS") == "1"
++    mgr = MirrorManager(policy=MirrorPolicy(allow_file_protocol=allow_file))
+     try:
+-        resolved = await resolve_repo_context(binding)
++        resolved = await resolve_repo_context(
++            binding,
++            sync=True,
++            mirror_manager=mgr,
++            policy=MirrorPolicy(allow_file_protocol=allow_file),
++            air_gap_mode=air_gap,
++        )
+     except Exception as exc:  # noqa: BLE001
+-        logger.warning("Repo context unavailable for project %s: %s", project_id, exc)
++        logger.warning(
++            "Repo context unavailable for project %s: %s", project_id, scrub_text(str(exc))
++        )
++        with contextlib.suppress(Exception):
++            await session.flush()
+         return None
++    with contextlib.suppress(Exception):
++        await session.flush()
+     return _RepoContext(head_commit=resolved.head_commit, mirror_path=resolved.mirror_path)
+ 
+ 
+@@ -350,7 +374,9 @@ class GateWorkerRunner:
+             if issue is not None:
+                 issue_dict["comments"] = await _load_issue_comments(session, issue.id)
+             repo_ctx = (
+-                await _load_repo_context(session, execution.project_id) if execution else None
++                await _load_repo_context(session, execution.project_id)
++                if execution and agent_def and agent_def.repo_access_mode != "none"
++                else None
+             )
+             base_timeout = resolve_effective_gate_timeout_ms(
+                 hook_timeout_ms=hook.timeout_ms if hook else None,
+@@ -505,19 +531,12 @@ class GateWorkerRunner:
+ 
+                         if live_provider is not None:
+                             from agent.budget import BudgetEnforcer  # noqa: PLC0415
+-                            from agent.harnesses.in_app_sdk import InAppSdkHarness  # noqa: PLC0415
+ 
+                             budget_enforcer = BudgetEnforcer(
+                                 session_factory=self.session_factory,
+                                 rls_context=admin_ctx,
+                             )
+-                            live_harness = InAppSdkHarness(
+-                                provider=live_provider,
+-                                budget_enforcer=budget_enforcer,
+-                                session_factory=self.session_factory,
+-                                rls_context=admin_ctx,
+-                            )
+-                            self.registry.register("in_app_sdk", live_harness)
++                            agent_dict["budget_enforcer"] = budget_enforcer
+                             agent_dict["provider"] = live_provider
+                             agent_dict["provider_config_id"] = provider_row.id
+                             agent_dict["workspace_id"] = ws_id
+diff --git a/database/models/repo_binding.py b/database/models/repo_binding.py
+index e2252fbc..fcd35c83 100644
+--- a/database/models/repo_binding.py
++++ b/database/models/repo_binding.py
+@@ -4,7 +4,6 @@
+ 
+ from __future__ import annotations
+ 
+-import os
+ import uuid  # noqa: TC003
+ from datetime import datetime  # noqa: TC003
+ from pathlib import Path
+@@ -103,12 +102,9 @@ class ProjectRepoBinding(Base):
+     @property
+     def mirror_path(self) -> Path:
+         """Derived filesystem path for the bare mirror repository."""
+-        base = (
+-            os.environ.get("KANBAN_REPO_MIRROR_DIR")
+-            or os.environ.get("KANBAN_GIT_MIRRORS_DIR")
+-            or (f"{os.environ['KB_DATA_DIR']}/git-mirrors" if "KB_DATA_DIR" in os.environ else None)
+-            or "/var/lib/kanban/git-mirrors"
+-        )
++        from kanban.repos.mirror import resolve_mirror_base_dir  # noqa: PLC0415
++
++        base = resolve_mirror_base_dir()
+         return Path(f"{base}/{self.workspace_id}/{self.id}.git")
+ 
+ 
+diff --git a/kanban/repos/mirror.py b/kanban/repos/mirror.py
+index 060a5bd1..060eb193 100644
+--- a/kanban/repos/mirror.py
++++ b/kanban/repos/mirror.py
+@@ -25,6 +25,7 @@ from kanban.security.envelope import (
+     SealedSecret,
+     open_bound,
+ )
++from kanban.security.scrubber import scrub_text
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Callable, Mapping, Sequence
+@@ -110,6 +111,9 @@ _DEFAULT_BASE_DIR: Final[Path] = Path(
+ )
+ 
+ 
++_MIRROR_LOCKS: dict[tuple[str, str], asyncio.Lock] = {}
++
++
+ class GitResult(NamedTuple):
+     """Result of a git command execution."""
+ 
+@@ -249,6 +253,8 @@ class MirrorManager:
+         return [
+             "git",
+             "-c",
++            "http.followRedirects=false",
++            "-c",
+             "core.hooksPath=/dev/null",
+             "-c",
+             f"protocol.file.allow={'always' if allow_file else 'never'}",
+@@ -284,7 +290,28 @@ class MirrorManager:
+                 total += entry.stat().st_size
+         return total
+ 
+-    async def clone_or_fetch(  # noqa: C901, PLR0912, PLR0915
++    async def clone_or_fetch(
++        self,
++        binding: ProjectRepoBinding,
++        *,
++        allowed_git_cidrs: Sequence[str] | None = None,
++        air_gap_mode: bool = False,
++        pinned_ip: str | None = None,
++        resolver: Callable[[str], list[str]] | None = None,
++    ) -> None:
++        """Serialize clone/fetch per mirror via an asyncio.Lock, then run it."""
++        key = (str(binding.workspace_id), str(binding.id))
++        lock = _MIRROR_LOCKS.setdefault(key, asyncio.Lock())
++        async with lock:
++            await self._clone_or_fetch_locked(
++                binding,
++                allowed_git_cidrs=allowed_git_cidrs,
++                air_gap_mode=air_gap_mode,
++                pinned_ip=pinned_ip,
++                resolver=resolver,
++            )
++
++    async def _clone_or_fetch_locked(  # noqa: C901, PLR0912, PLR0915
+         self,
+         binding: ProjectRepoBinding,
+         *,
+@@ -335,7 +362,7 @@ class MirrorManager:
+                 aad = f"kanban/repo-binding/v1|{binding.id}|{binding.project_id}".encode()
+                 decrypted_ba = open_bound(sealed, aad, self.kek_provider)
+             except (EnvelopeDecryptError, Exception) as exc:
+-                binding.last_fetch_error = f"CREDENTIAL_DECRYPT_FAILED: {exc}"
++                binding.last_fetch_error = scrub_text(f"CREDENTIAL_DECRYPT_FAILED: {exc}")
+                 raise
+ 
+         with tempfile.TemporaryDirectory() as tmp_dir:
+@@ -388,6 +415,7 @@ class MirrorManager:
+                 env = self._build_env(tmp_dir)
+                 is_existing_mirror = (target_path / "HEAD").exists()
+ 
++                fetch_url = validated.normalized_url if validated else binding.remote_url
+                 if is_existing_mirror:
+                     argv = [
+                         *self._build_base_argv(),
+@@ -396,7 +424,9 @@ class MirrorManager:
+                         "fetch",
+                         "--prune",
+                         "--no-tags",
+-                        "origin",
++                        "--",
++                        fetch_url,
++                        "+refs/*:refs/*",
+                     ]
+                 else:
+                     remote_url = validated.normalized_url if validated else binding.remote_url
+@@ -422,8 +452,8 @@ class MirrorManager:
+ 
+                 if res.returncode != 0:
+                     err_snip = res.stderr.strip()[:200]
+-                    binding.last_fetch_error = f"GIT_EXIT_{res.returncode}: {err_snip}"
+-                    msg_err = f"Git command failed: {res.stderr.strip()}"
++                    binding.last_fetch_error = scrub_text(f"GIT_EXIT_{res.returncode}: {err_snip}")
++                    msg_err = scrub_text(f"Git command failed: {res.stderr.strip()}")
+                     raise GitExecutionError(msg_err)
+ 
+                 # 2 GiB mirror size enforcement
+diff --git a/kanban/tests/repos/test_mirror.py b/kanban/tests/repos/test_mirror.py
+index 438cd4eb..6fac04a6 100644
+--- a/kanban/tests/repos/test_mirror.py
++++ b/kanban/tests/repos/test_mirror.py
+@@ -85,7 +85,9 @@ def test_mirror_manager_default_base_dir(tmp_path: Path, monkeypatch: pytest.Mon
+     assert mgr.base_dir == mirror_dir
+ 
+ 
+-def test_project_repo_binding_mirror_path_with_env(monkeypatch: pytest.MonkeyPatch) -> None:
++def test_project_repo_binding_mirror_path_with_env(
++    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
++) -> None:
+     """ProjectRepoBinding.mirror_path reflects KANBAN_REPO_MIRROR_DIR and KB_DATA_DIR."""
+     ws_id = uuid.uuid4()
+     binding_id = uuid.uuid4()
+@@ -98,15 +100,17 @@ def test_project_repo_binding_mirror_path_with_env(monkeypatch: pytest.MonkeyPat
+         access_mode="ro",
+     )
+ 
+-    monkeypatch.setenv("KANBAN_REPO_MIRROR_DIR", "/mnt/custom-git")
+-    assert binding.mirror_path == Path(f"/mnt/custom-git/{ws_id}/{binding_id}.git")
++    monkeypatch.setenv("KANBAN_REPO_MIRROR_DIR", str(tmp_path / "custom-git"))
++    assert binding.mirror_path == tmp_path / "custom-git" / str(ws_id) / f"{binding_id}.git"
+ 
+     monkeypatch.delenv("KANBAN_REPO_MIRROR_DIR")
+-    monkeypatch.setenv("KB_DATA_DIR", "/var/lib/custom-kb")
+-    assert binding.mirror_path == Path(f"/var/lib/custom-kb/git-mirrors/{ws_id}/{binding_id}.git")
++    monkeypatch.setenv("KB_DATA_DIR", str(tmp_path / "kbdata"))
++    assert binding.mirror_path == (
++        tmp_path / "kbdata" / "git-mirrors" / str(ws_id) / f"{binding_id}.git"
++    )
+ 
+     monkeypatch.delenv("KB_DATA_DIR")
+-    assert binding.mirror_path == Path(f"/var/lib/kanban/git-mirrors/{ws_id}/{binding_id}.git")
++    assert binding.mirror_path == (resolve_mirror_base_dir() / str(ws_id) / f"{binding_id}.git")
+ 
+ 
+ @pytest.mark.asyncio
+diff --git a/kanban/tests/repos/test_mirror_manager.py b/kanban/tests/repos/test_mirror_manager.py
+index 64219ecc..dfa6d7e6 100644
+--- a/kanban/tests/repos/test_mirror_manager.py
++++ b/kanban/tests/repos/test_mirror_manager.py
+@@ -144,7 +144,8 @@ async def test_fetch_called_when_mirror_head_exists(tmp_path: Path) -> None:
+     assert "fetch" in fetch_argv
+     assert "--prune" in fetch_argv
+     assert "--no-tags" in fetch_argv
+-    assert "origin" in fetch_argv
++    assert "https://github.com/org/repo.git" in fetch_argv
++    assert "http.followRedirects=false" in fetch_argv
+     assert f"--git-dir={mirror_dir}" in fetch_argv
+ 
+ 
