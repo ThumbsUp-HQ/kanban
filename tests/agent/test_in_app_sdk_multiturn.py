@@ -200,17 +200,23 @@ def test_grade_fields() -> None:
 async def test_max_turns_exceeded(repo: tuple[Path, str]) -> None:
     prov = ScriptedProvider([[("repo_tree", {})]] * 20)
     ctx = make_ctx(repo)
-    with pytest.raises(RepoToolPolicyError) as ei:
-        await InAppSdkHarness(provider=prov, max_turns=3).run(ctx, {})
-    assert ei.value.code == "TOOL_LOOP_LIMIT_EXCEEDED"
+    out = json.loads(await InAppSdkHarness(provider=prov, max_turns=3).run(ctx, {}))
+    assert out["decision"] == "approve"
+    final = prov.requests[-1]
+    assert final.tools == ()
+    assert final.response_model is not None
+    assert final.think is False
+    assert len(prov.requests) == 4
     assert len(ctx.ephemeral_token) == 0
 
 
 async def test_max_total_tool_calls_exceeded(repo: tuple[Path, str]) -> None:
     prov = ScriptedProvider([[("repo_tree", {})] * 5])
-    with pytest.raises(RepoToolPolicyError) as ei:
-        await InAppSdkHarness(provider=prov, max_total_tool_calls=3).run(make_ctx(repo), {})
-    assert ei.value.code == "TOOL_LOOP_LIMIT_EXCEEDED"
+    h = InAppSdkHarness(provider=prov, max_total_tool_calls=3)
+    out = json.loads(await h.run(make_ctx(repo), {}))
+    assert out["decision"] == "approve"
+    assert len(h.last_tool_traces) == 3
+    assert prov.requests[-1].tools == ()
 
 
 async def test_unlisted_tool_fails_closed(repo: tuple[Path, str]) -> None:

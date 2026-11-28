@@ -77,8 +77,8 @@ async def test_transition_ticket_returns_grade(passed: bool, grade: str) -> None
     assert res["grade"] == grade
     assert res["passed"] is passed
     call = client.calls[0]
-    assert call["timeout_s"] == 130.0
-    assert call["params"] == {"wait": "true", "wait_timeout_ms": 120000}
+    assert call["timeout_s"] == 85.0
+    assert call["params"] == {"wait": "true", "wait_timeout_ms": 75000}
 
 
 async def test_transition_ticket_omits_grade_when_absent() -> None:
@@ -99,8 +99,8 @@ async def test_complete_work_returns_grade(passed: bool, grade: str) -> None:
     )
     assert res["grade"] == grade
     call = client.calls[0]
-    assert call["timeout_s"] == 130.0
-    assert call["params"] == {"wait": "true", "wait_timeout_ms": 120000}
+    assert call["timeout_s"] == 85.0
+    assert call["params"] == {"wait": "true", "wait_timeout_ms": 75000}
 
 
 async def test_api_client_timeout_propagates() -> None:

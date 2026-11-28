@@ -188,8 +188,8 @@ async def transition_ticket(  # noqa: C901
             "POST",
             f"/api/v1/issues/{identifier}/transition",
             json_data=payload,
-            params={"wait": "true", "wait_timeout_ms": 120000},
-            timeout_s=130.0,
+            params={"wait": "true", "wait_timeout_ms": 75000},
+            timeout_s=85.0,
             subject_token=subject_token,
             mcp_session_id=session_id,
         )
