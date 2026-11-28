@@ -12,6 +12,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Final
 
 from sqlalchemy import select, text
+from sqlalchemy.exc import ProgrammingError
 
 from database.models.agent_definition import AgentDefinition
 from database.models.issues import Issue, IssueComment, IssueLabel
@@ -163,6 +164,41 @@ async def _ensure_agent_acl_and_role(
     )
 
 
+_SQLSTATE_INSUFFICIENT_PRIVILEGE: Final[str] = "42501"
+
+
+async def _ensure_agent_acl_and_role_best_effort(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    project_id: uuid.UUID,
+    issue_id: uuid.UUID,
+    principal_id: uuid.UUID,
+) -> None:
+    """Provision agent access at dispatch time without failing non-admin callers.
+
+    The dispatching caller may be a plain project MEMBER whose RLS context cannot
+    INSERT role_bindings / resource_acl_entries (SQLSTATE 42501). That must not
+    abort the transition: the admin-context decision/timeout paths re-run the
+    idempotent provisioning before the agent authors anything. Runs in a SAVEPOINT
+    so a denied INSERT leaves the outer transaction usable. Other DB errors propagate.
+    """
+    try:
+        async with session.begin_nested():
+            await _ensure_agent_acl_and_role(
+                session=session,
+                workspace_id=workspace_id,
+                project_id=project_id,
+                issue_id=issue_id,
+                principal_id=principal_id,
+            )
+    except ProgrammingError as exc:
+        if getattr(exc.orig, "sqlstate", None) != _SQLSTATE_INSUFFICIENT_PRIVILEGE:
+            raise
+        logger.info(
+            "Deferring agent ACL provisioning for issue %s: caller lacks privilege", issue_id
+        )
+
+
 class AgentGateDispatcher:
     """Dispatches asynchronous AI/CLI agent transition helpers (KB-P5-18)."""
 
@@ -204,7 +240,7 @@ class AgentGateDispatcher:
             else None
         )
         if agent_def and agent_def.principal_id is not None:
-            await _ensure_agent_acl_and_role(
+            await _ensure_agent_acl_and_role_best_effort(
                 session=session,
                 workspace_id=execution.workspace_id,
                 project_id=execution.project_id,
