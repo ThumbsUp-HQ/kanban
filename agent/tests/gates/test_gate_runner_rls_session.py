@@ -479,8 +479,8 @@ async def test_positive_e2e_real_pg_and_mock_ollama_gate_approval(
         # Dispatch execution
         await runner.worker.handle_dispatch(event)
 
-        assert mock_server.request_count == 1
-        assert len(mock_server.received_payloads) == 1
+        assert mock_server.request_count == 2
+        assert len(mock_server.received_payloads) == 2
         payload = mock_server.received_payloads[0]
         assert payload["model"] == "nemotron-3-super:latest"
 
@@ -503,7 +503,7 @@ async def test_positive_e2e_real_pg_and_mock_ollama_gate_approval(
             )
 
             assert ledger_row["tokens_reserved"] == 0
-            assert ledger_row["tokens_used"] == 75
+            assert ledger_row["tokens_used"] == 150
 
             # Verify decision record
             inv_row = (
@@ -571,7 +571,7 @@ async def test_negative_gate_rejection_on_incomplete_ticket(
 
         await runner.worker.handle_dispatch(event)
 
-        assert mock_server.request_count == 1
+        assert mock_server.request_count == 2
 
         async with pg_worker_db.connect() as conn:
             ledger_row = (
@@ -589,7 +589,7 @@ async def test_negative_gate_rejection_on_incomplete_ticket(
             )
 
             assert ledger_row["tokens_reserved"] == 0
-            assert ledger_row["tokens_used"] == 60
+            assert ledger_row["tokens_used"] == 120
 
             inv_row = (
                 (

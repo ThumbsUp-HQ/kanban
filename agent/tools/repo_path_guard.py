@@ -33,6 +33,10 @@ CODE_REPO_BINARY_FILE_UNSUPPORTED: Final[str] = "REPO_BINARY_FILE_UNSUPPORTED"
 CODE_REPO_GREP_PATTERN_INVALID: Final[str] = "REPO_GREP_PATTERN_INVALID"
 
 MAX_REPO_PATH_BYTES: Final[int] = 512
+_ASCII_CTRL_LIMIT: Final[int] = 0x20
+_ASCII_DEL: Final[int] = 0x7F
+_SURROGATE_LO: Final[int] = 0xD800
+_SURROGATE_HI: Final[int] = 0xDFFF
 
 SECRET_PATH_PATTERNS: Final[tuple[str, ...]] = (
     ".env",
@@ -51,6 +55,20 @@ SECRET_PATH_PATTERNS: Final[tuple[str, ...]] = (
     ".netrc",
     ".npmrc",
     ".pypirc",
+    ".ssh",
+    ".ssh/*",
+    "*/.ssh/*",
+    ".aws",
+    ".aws/*",
+    "*/.aws/*",
+    ".kube",
+    ".kube/*",
+    "*/.kube/*",
+    "*.tfvars",
+    "*.tfstate*",
+    "*credentials*",
+    "*.keystore",
+    "secrets.*",
 )
 
 
@@ -66,6 +84,17 @@ class RepoToolPolicyError(Exception):
 
 def _validate_path_chars_and_prefix(raw: str) -> None:
     """Validate forbidden characters and prefixes in raw path."""
+    if raw != raw.strip():
+        msg = "Path has leading or trailing whitespace"
+        raise RepoToolPolicyError(CODE_REPO_PATH_INVALID, msg)
+    for ch in raw:
+        code = ord(ch)
+        if code < _ASCII_CTRL_LIMIT or code == _ASCII_DEL:
+            msg = "Path contains ASCII control characters"
+            raise RepoToolPolicyError(CODE_REPO_PATH_INVALID, msg)
+        if _SURROGATE_LO <= code <= _SURROGATE_HI:
+            msg = "Path contains UTF-16 lone surrogate characters"
+            raise RepoToolPolicyError(CODE_REPO_PATH_INVALID, msg)
     if "\0" in raw:
         msg = "Path contains NUL byte"
         raise RepoToolPolicyError(CODE_REPO_PATH_INVALID, msg)

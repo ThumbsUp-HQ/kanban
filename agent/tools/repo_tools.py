@@ -5,7 +5,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import os
 import re
+import signal
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
@@ -28,6 +31,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DEFAULT_GIT_TIMEOUT_S",
+    "MAX_BLOB_READ_BYTES",
     "MAX_DIFF_BASE_REF_LEN",
     "MAX_FILE_READ_LINES_SPAN",
     "MAX_GREP_PATTERN_LEN",
@@ -46,6 +50,7 @@ MAX_FILE_READ_LINES_SPAN: Final[int] = 400
 MAX_GREP_PATTERN_LEN: Final[int] = 200
 MAX_LOG_COMMITS: Final[int] = 50
 MAX_DIFF_BASE_REF_LEN: Final[int] = 120
+MAX_BLOB_READ_BYTES: Final[int] = 1_048_576  # 1 MiB
 
 _RE_SHA: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{40,64}$")
 _RE_BASE_REF: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9._/~^-]{1,120}$")
@@ -66,6 +71,17 @@ _SECRET_PATH_EXCLUDES: Final[tuple[str, ...]] = (
     ":(exclude).netrc",
     ":(exclude).npmrc",
     ":(exclude).pypirc",
+    ":(exclude).ssh/*",
+    ":(exclude)*/.ssh/*",
+    ":(exclude).aws/*",
+    ":(exclude)*/.aws/*",
+    ":(exclude).kube/*",
+    ":(exclude)*/.kube/*",
+    ":(exclude)*.tfvars",
+    ":(exclude)*.tfstate*",
+    ":(exclude)*credentials*",
+    ":(exclude)*.keystore",
+    ":(exclude)secrets.*",
 )
 
 _CLEAN_GIT_ENV: Final[dict[str, str]] = {
@@ -83,6 +99,15 @@ def _cap_and_scrub(output_bytes: bytes, max_bytes: int = MAX_OUTPUT_BYTES) -> st
     if is_truncated:
         text += "\n[TRUNCATED]"
     return scrub_text(text)
+
+
+def _require_regular_blob(ls_tree_entry: str, norm_path: str) -> None:
+    """Reject trees, git symlinks (120000), and submodules (160000)."""
+    meta = ls_tree_entry.split("\t", 1)[0].split()
+    mode, kind = [*meta, "", ""][:2]
+    if mode not in {"100644", "100755"} or kind != "blob":
+        msg = f"Path is not a regular file blob (symlink, submodule, or tree): {norm_path}"
+        raise RepoToolPolicyError(CODE_REPO_PATH_INVALID, msg)
 
 
 def _filter_tree_lines(stdout: bytes, norm_path: str, depth: int) -> list[str]:
@@ -171,6 +196,7 @@ class BareGitRepoToolkit:
             *args,
         ]
 
+        proc: asyncio.subprocess.Process | None = None
         try:
             async with asyncio.timeout(self.timeout_s):
                 proc = await asyncio.create_subprocess_exec(
@@ -178,10 +204,18 @@ class BareGitRepoToolkit:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     env=_CLEAN_GIT_ENV,
+                    start_new_session=True,
                 )
                 stdout, stderr = await proc.communicate()
                 return proc.returncode if proc.returncode is not None else -1, stdout, stderr
-        except TimeoutError as exc:
+        except (TimeoutError, asyncio.CancelledError) as exc:
+            if proc is not None:
+                with contextlib.suppress(ProcessLookupError, PermissionError):
+                    os.killpg(proc.pid, signal.SIGKILL)
+                with contextlib.suppress(Exception):
+                    await asyncio.shield(proc.wait())
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             msg = f"Git subprocess execution timed out after {self.timeout_s}s: {' '.join(cmd[:6])}"
             raise RepoToolPolicyError(CODE_REPO_TIMEOUT, msg) from exc
         except OSError as exc:
@@ -198,8 +232,7 @@ class BareGitRepoToolkit:
         depth = max(1, min(MAX_TREE_DEPTH, int(max_depth)))
 
         cmd_args = ["ls-tree", "-r", "--full-tree", "--end-of-options", self.head_commit]
-        if norm_path:
-            cmd_args.extend(["--", norm_path])
+        cmd_args.extend(["--", norm_path] if norm_path else [])
 
         rc, stdout, stderr = await self._exec_git(*cmd_args)
         if rc != 0:
@@ -230,17 +263,38 @@ class BareGitRepoToolkit:
             )
             raise RepoToolPolicyError(CODE_REPO_PATH_INVALID, msg)
 
-        cmd_args = ["cat-file", "-p", "--end-of-options", f"{self.head_commit}:{norm_path}"]
-        rc, stdout, stderr = await self._exec_git(*cmd_args)
+        rc_ls, out_ls, _err_ls = await self._exec_git(
+            "ls-tree", "--end-of-options", self.head_commit, "--", norm_path
+        )
+        entry = out_ls.decode("utf-8", errors="replace").strip()
+        if rc_ls != 0 or not entry:
+            msg = f"File '{norm_path}' not found at {self.head_commit}"
+            raise RepoToolPolicyError(CODE_REPO_FILE_NOT_FOUND, msg)
+        _require_regular_blob(entry, norm_path)
 
+        blob_ref = f"{self.head_commit}:{norm_path}"
+        rc_sz, out_sz, _err_sz = await self._exec_git(
+            "cat-file", "-s", "--end-of-options", blob_ref
+        )
+        try:
+            blob_size = int(out_sz.decode("ascii", errors="replace").strip())
+        except ValueError:
+            blob_size = -1
+        if rc_sz != 0 or blob_size < 0:
+            msg = f"File '{norm_path}' not found at {self.head_commit}"
+            raise RepoToolPolicyError(CODE_REPO_FILE_NOT_FOUND, msg)
+        if blob_size > MAX_BLOB_READ_BYTES:
+            msg = f"File too large ({blob_size} bytes > {MAX_BLOB_READ_BYTES}): {norm_path}"
+            raise RepoToolPolicyError(CODE_REPO_PATH_INVALID, msg)
+
+        rc, stdout, stderr = await self._exec_git("cat-file", "-p", "--end-of-options", blob_ref)
         if rc != 0:
             err_msg = stderr.decode("utf-8", errors="replace").strip()
             msg = f"File '{norm_path}' not found at {self.head_commit}: {err_msg}"
             raise RepoToolPolicyError(CODE_REPO_FILE_NOT_FOUND, msg)
 
-        # Reject binary files containing NUL byte in first 8 KiB
-        sample = stdout[:8192]
-        if b"\0" in sample:
+        stdout = stdout[:MAX_BLOB_READ_BYTES]
+        if b"\0" in stdout:
             msg = f"Binary file unsupported: {norm_path}"
             raise RepoToolPolicyError(CODE_REPO_BINARY_FILE_UNSUPPORTED, msg)
 
@@ -273,10 +327,12 @@ class BareGitRepoToolkit:
             "--max-count=50",
             "-e",
             pattern,
+            "--end-of-options",
             self.head_commit,
+            "--",
         ]
-        if norm_path:
-            cmd_args.extend(["--", norm_path])
+        cmd_args.append(norm_path or ".")
+        cmd_args.extend(_SECRET_PATH_EXCLUDES)
 
         rc, stdout, _stderr = await self._exec_git(*cmd_args)
         if rc == 1:
@@ -325,8 +381,9 @@ class BareGitRepoToolkit:
             "--end-of-options",
             self.head_commit,
         ]
-        if norm_path:
-            cmd_args.extend(["--", norm_path])
+        cmd_args.append("--")
+        cmd_args.append(norm_path or ".")
+        cmd_args.extend(_SECRET_PATH_EXCLUDES)
 
         rc, stdout, stderr = await self._exec_git(*cmd_args)
         if rc != 0:
@@ -369,6 +426,7 @@ class BareGitRepoToolkit:
             "--no-ext-diff",
             "--no-textconv",
             "--unified=3",
+            "--end-of-options",
             base_sha,
             self.head_commit,
         ]

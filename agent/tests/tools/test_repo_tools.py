@@ -68,7 +68,7 @@ def bare_repo_fixture(tmp_path: Path) -> tuple[Path, str, str, str]:
         b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
     )
 
-    (work / "secrets.py").write_text(
+    (work / "app_tokens.py").write_text(
         'GITHUB_TOKEN = "ghp_111122223333444455556666777788889999"\n',
         encoding="utf-8",
     )
@@ -208,8 +208,8 @@ async def test_repo_toolkit_secret_masking_and_scrubbing(
     assert ".env.production" not in diff_out
     assert "server.key" not in diff_out
 
-    # In-file credential scrubbing: ghp_ token in secrets.py is redacted
-    secrets_read = await toolkit.repo_read_file("secrets.py")
+    # In-file credential scrubbing: ghp_ token in app_tokens.py is redacted
+    secrets_read = await toolkit.repo_read_file("app_tokens.py")
     assert "ghp_111122223333444455556666777788889999" not in secrets_read
     assert "[REDACTED_GITHUB_TOKEN]" in secrets_read or "REDACTED" in secrets_read
 
