@@ -58,7 +58,7 @@ async def test_complete_work_returns_sync_verdict_and_requests_wait() -> None:
     assert out["passed"] is True
     assert out["status"] == "approved"
     assert out["findings"] == ["a.py"]
-    assert seen == ["wait=true"]
+    assert seen == ["wait=true&wait_timeout_ms=120000"]
 
 
 async def test_transition_sync_verdict_and_timeout_stays_pending() -> None:

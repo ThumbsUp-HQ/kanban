@@ -319,6 +319,11 @@ class BareGitRepoToolkit:
             msg = f"Access to secret path denied: {norm_path}"
             raise RepoToolPolicyError(CODE_REPO_SECRET_PATH_DENIED, msg)
 
+        # git 2.39 (CI base image) rejects --end-of-options for grep; refuse option-like revs.
+        if self.head_commit.startswith("-"):
+            msg = "Invalid head commit"
+            raise RepoToolPolicyError(CODE_REPO_GREP_PATTERN_INVALID, msg)
+
         cmd_args = [
             "grep",
             "-I",
@@ -327,7 +332,6 @@ class BareGitRepoToolkit:
             "--max-count=50",
             "-e",
             pattern,
-            "--end-of-options",
             self.head_commit,
             "--",
         ]
