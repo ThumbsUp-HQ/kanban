@@ -1,0 +1,556 @@
+diff --git a/agent/providers/base.py b/agent/providers/base.py
+index 55ab84d7..32a0a84c 100644
+--- a/agent/providers/base.py
++++ b/agent/providers/base.py
+@@ -43,6 +43,10 @@ __all__ = [
+     "CLIRunRequest",
+     "CLIRunResult",
+     "CLIRunner",
++    "ChatMessage",
++    "ChatToolCall",
++    "ChatTurnRequest",
++    "ChatTurnResponse",
+     "CompletionRequest",
+     "EgressDenied",
+     "EmbedBatchRequest",
+@@ -61,6 +65,8 @@ __all__ = [
+     "StructuredRequest",
+     "StructuredResponse",
+     "ToolCallStep",
++    "ToolCallingProvider",
++    "ToolDefinition",
+ ]
+ 
+ TModel = TypeVar("TModel", bound=BaseModel)
+@@ -224,6 +230,78 @@ class LLMProvider(Protocol):
+         ...
+ 
+ 
++class ToolDefinition(BaseModel):
++    """Declared tool (function) the model may call; the name forms the call allowlist."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    name: str
++    description: str
++    parameters: dict[str, Any]
++
++
++class ChatToolCall(BaseModel):
++    """Structured tool call emitted by the model (never parsed from free text)."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    id: str | None = None
++    name: str
++    arguments: dict[str, Any]
++
++
++class ChatMessage(BaseModel):
++    """Single chat transcript message."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    role: Literal["system", "user", "assistant", "tool"]
++    content: str = ""
++    thinking: str | None = None
++    tool_calls: tuple[ChatToolCall, ...] = ()
++    tool_name: str | None = None
++    tool_call_id: str | None = None
++
++
++class ChatTurnRequest(BaseModel):
++    """Single multi-turn chat request, optionally with tools or a structured schema."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
++
++    model: str
++    messages: tuple[ChatMessage, ...]
++    tools: tuple[ToolDefinition, ...] = ()
++    response_model: type[BaseModel] | None = None
++    temperature: float = 0.0
++    max_output_tokens: int = 4096
++    think: bool | None = None
++    ttft_deadline_ms: int | None = None
++    metadata: dict[str, Any] = Field(default_factory=dict)
++
++
++class ChatTurnResponse(BaseModel):
++    """Result of one chat turn with telemetry."""
++
++    model_config = ConfigDict(frozen=True, extra="forbid")
++
++    message: ChatMessage
++    raw_content: str
++    done_reason: str | None
++    ttft_ms: float
++    total_latency_ms: float
++    prompt_tokens: int
++    completion_tokens: int
++
++
++@runtime_checkable
++class ToolCallingProvider(Protocol):
++    """Provider supporting multi-turn tool-calling chat."""
++
++    async def chat_turn(self, req: ChatTurnRequest) -> ChatTurnResponse:
++        """Execute one chat turn; tool calls come only from structured fields."""
++        ...
++
++
+ class CLIRunRequest(BaseModel):
+     """Request DTO for executing zero-shell CLI pipe harnesses."""
+ 
+diff --git a/agent/providers/ollama.py b/agent/providers/ollama.py
+index e9964ca7..d180a185 100644
+--- a/agent/providers/ollama.py
++++ b/agent/providers/ollama.py
+@@ -20,6 +20,10 @@ import httpx
+ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+ 
+ from agent.providers.base import (
++    ChatMessage,
++    ChatToolCall,
++    ChatTurnRequest,
++    ChatTurnResponse,
+     CompletionRequest,
+     EmbedBatchRequest,
+     HealthStatus,
+@@ -38,6 +42,7 @@ from agent.providers.errors import (
+ )
+ from agent.providers.net_guard import Resolver, resolve_and_pin
+ from agent.providers.schema_utils import dereference_json_schema, strip_think_tags
++from kanban.security.scrubber import scrub_text
+ 
+ if TYPE_CHECKING:
+     from collections.abc import AsyncIterator
+@@ -65,6 +70,9 @@ _IPV6_VERSION: int = 6
+ 
+ 
+ _HTTP_BAD_REQUEST = 400
++_MAX_TOOL_CALLS: int = 8
++_MAX_TOOL_ARGS_BYTES: int = 64 * 1024
++_MAX_ERROR_BODY_CHARS: int = 512
+ 
+ 
+ class OllamaSettings(BaseModel):
+@@ -166,6 +174,73 @@ def _parse_embeddings_data(embeddings_raw: object) -> list[list[float]]:
+     return embeddings
+ 
+ 
++def _safe_body(response: httpx.Response) -> str:
++    """Return a truncated, secret-scrubbed error body."""
++    return scrub_text(response.text[:_MAX_ERROR_BODY_CHARS])
++
++
++def _parse_tool_calls(raw: object, allowed: frozenset[str]) -> tuple[ChatToolCall, ...]:  # noqa: C901
++    """Strictly validate structured tool_calls against the declared allowlist."""
++    if raw is None:
++        return ()
++    if not isinstance(raw, list):
++        msg = "Ollama tool_calls is not a list"
++        raise ProviderProtocolError(msg)
++    if len(raw) > _MAX_TOOL_CALLS:
++        msg = f"Ollama returned {len(raw)} tool calls (max {_MAX_TOOL_CALLS})"
++        raise ProviderProtocolError(msg, code="TOO_MANY_TOOL_CALLS")
++    calls: list[ChatToolCall] = []
++    for item in raw:
++        fn = item.get("function") if isinstance(item, dict) else None
++        if not isinstance(fn, dict):
++            msg = "Ollama tool call missing function object"
++            raise ProviderProtocolError(msg)
++        name = fn.get("name")
++        if not isinstance(name, str) or name not in allowed:
++            msg = "Ollama tool call names an undeclared tool"
++            raise ProviderProtocolError(msg, code="TOOL_NOT_ALLOWED")
++        args = fn.get("arguments", {})
++        if isinstance(args, str):
++            if len(args.encode("utf-8")) > _MAX_TOOL_ARGS_BYTES:
++                msg = "Ollama tool call arguments too large"
++                raise ProviderProtocolError(msg)
++            try:
++                args = json.loads(args)
++            except json.JSONDecodeError as err:
++                msg = "Ollama tool call arguments are malformed JSON"
++                raise ProviderProtocolError(msg) from err
++        if not isinstance(args, dict):
++            msg = "Ollama tool call arguments are not an object"
++            raise ProviderProtocolError(msg)
++        call_id = item.get("id")
++        calls.append(
++            ChatToolCall(
++                id=call_id if isinstance(call_id, str) else None,
++                name=name,
++                arguments=args,
++            )
++        )
++    return tuple(calls)
++
++
++def _message_to_wire(m: ChatMessage) -> dict[str, Any]:
++    out: dict[str, Any] = {"role": m.role, "content": m.content}
++    if m.tool_calls:
++        out["tool_calls"] = [
++            {
++                **({"id": c.id} if c.id else {}),
++                "function": {"name": c.name, "arguments": c.arguments},
++            }
++            for c in m.tool_calls
++        ]
++    if m.role == "tool":
++        if m.tool_name:
++            out["tool_name"] = m.tool_name
++        if m.tool_call_id:
++            out["tool_call_id"] = m.tool_call_id
++    return out
++
++
+ class OllamaProvider(LLMProvider):
+     """Provider adapter communicating with local or remote Ollama daemon."""
+ 
+@@ -249,10 +324,10 @@ class OllamaProvider(LLMProvider):
+                     retry_s = float(retry_hdr)
+                 except ValueError:
+                     retry_s = None
+-            msg = f"Ollama rate limit exceeded (HTTP 429): {response.text}"
++            msg = f"Ollama rate limit exceeded (HTTP 429): {_safe_body(response)}"
+             raise ProviderHTTPError(msg, status=_HTTP_TOO_MANY_REQUESTS, retry_after_s=retry_s)
+         if response.status_code >= _HTTP_BAD_REQUEST:
+-            msg = f"Ollama returned HTTP {response.status_code}: {response.text}"
++            msg = f"Ollama returned HTTP {response.status_code}: {_safe_body(response)}"
+             raise ProviderHTTPError(msg, status=response.status_code)
+ 
+     async def _process_stream_lines(
+@@ -308,6 +383,148 @@ class OllamaProvider(LLMProvider):
+             )
+             chunk_idx += 1
+ 
++    async def _post_bounded(
++        self,
++        url: str,
++        payload: dict[str, Any],
++        headers: dict[str, str],
++        extensions: dict[str, Any],
++        timeout: float | None,  # noqa: ASYNC109
++    ) -> httpx.Response:
++        """POST and read the body incrementally, failing closed past _MAX_STREAM_BYTES."""
++        async with self._client.stream(
++            "POST",
++            url,
++            json=payload,
++            headers=headers,
++            extensions=extensions,
++            timeout=timeout,
++        ) as resp:
++            declared = resp.headers.get("content-length")
++            if declared is not None and declared.isdigit() and int(declared) > _MAX_STREAM_BYTES:
++                msg = f"Ollama response exceeds limit ({_MAX_STREAM_BYTES} B)"
++                raise ProviderProtocolError(msg, code="STREAM_TOO_LARGE")
++            buf = bytearray()
++            async for part in resp.aiter_bytes():
++                buf.extend(part)
++                if len(buf) > _MAX_STREAM_BYTES:
++                    msg = f"Ollama response exceeds limit ({_MAX_STREAM_BYTES} B)"
++                    raise ProviderProtocolError(msg, code="STREAM_TOO_LARGE")
++            return httpx.Response(
++                resp.status_code,
++                headers={
++                    k: v
++                    for k, v in resp.headers.items()
++                    if k.lower() not in ("content-encoding", "content-length", "transfer-encoding")
++                },
++                content=bytes(buf),
++            )
++
++    async def chat_turn(  # noqa: C901, PLR0912, PLR0915
++        self,
++        req: ChatTurnRequest,
++    ) -> ChatTurnResponse:
++        """Run one /api/chat turn with strict structured tool-call validation."""
++        self._verify_model_allowed(req.model)
++        url, headers, extensions = await self._resolve_target("/api/chat")
++
++        payload: dict[str, Any] = {
++            "model": req.model,
++            "messages": [_message_to_wire(m) for m in req.messages],
++            "options": {
++                "temperature": req.temperature,
++                "num_predict": req.max_output_tokens,
++            },
++            "stream": False,
++            "keep_alive": self._settings.keep_alive,
++        }
++        if req.tools:
++            payload["tools"] = [
++                {
++                    "type": "function",
++                    "function": {
++                        "name": t.name,
++                        "description": t.description,
++                        "parameters": t.parameters,
++                    },
++                }
++                for t in req.tools
++            ]
++        elif req.response_model is not None:
++            payload["format"] = dereference_json_schema(req.response_model.model_json_schema())
++        if req.think is not None:
++            payload["think"] = req.think
++
++        allowed = frozenset(t.name for t in req.tools)
++        t0 = time.perf_counter()
++        deadline_s = req.ttft_deadline_ms / 1000.0 if req.ttft_deadline_ms is not None else None
++        try:
++            budget = req.max_output_tokens
++            retried_length = False
++            while True:
++                timeout = None
++                if deadline_s is not None:
++                    timeout = max(deadline_s - (time.perf_counter() - t0), 0.001)
++                response = await self._post_bounded(url, payload, headers, extensions, timeout)
++                if response.status_code == _HTTP_BAD_REQUEST and "think" in payload:
++                    del payload["think"]
++                    continue
++                latency_ms = (time.perf_counter() - t0) * 1000.0
++                self._handle_error_response(response)
++                try:
++                    data = response.json()
++                except Exception as err:
++                    msg = f"Ollama returned malformed JSON payload: {err}"
++                    raise ProviderProtocolError(msg) from err
++                if not isinstance(data, dict):
++                    msg = "Ollama response is not a JSON object"
++                    raise ProviderProtocolError(msg)
++                m = data.get("message", {})
++                if not isinstance(m, dict):
++                    msg = "Ollama message is not an object"
++                    raise ProviderProtocolError(msg)
++                if (
++                    data.get("done_reason") == "length"
++                    and not str(m.get("content", "")).strip()
++                    and not m.get("tool_calls")
++                    and not retried_length
++                    and (deadline_s is None or time.perf_counter() - t0 < deadline_s)
++                ):
++                    retried_length = True
++                    budget *= 2
++                    payload["options"]["num_predict"] = budget
++                    continue
++                break
++        except httpx.TimeoutException as err:
++            msg = f"Ollama chat request timed out: {err}"
++            raise ProviderTimeout(msg) from err
++        except httpx.ConnectError as err:
++            msg = f"Failed to connect to Ollama: {err}"
++            raise ProviderUnavailable(msg) from err
++        except httpx.RequestError as err:
++            msg = f"Ollama HTTP request failed: {err}"
++            raise ProviderProtocolError(msg) from err
++
++        tool_calls = _parse_tool_calls(m.get("tool_calls"), allowed)
++        raw_content = str(m.get("content", ""))
++        thinking_raw = m.get("thinking")
++        thinking = strip_think_tags(str(thinking_raw)) if thinking_raw is not None else None
++        message = ChatMessage(
++            role="assistant",
++            content=strip_think_tags(raw_content),
++            thinking=thinking,
++            tool_calls=tool_calls,
++        )
++        return ChatTurnResponse(
++            message=message,
++            raw_content=raw_content,
++            done_reason=data.get("done_reason"),
++            ttft_ms=latency_ms,
++            total_latency_ms=latency_ms,
++            prompt_tokens=int(data.get("prompt_eval_count", 0)),
++            completion_tokens=int(data.get("eval_count", 0)),
++        )
++
+     async def stream_complete(
+         self,
+         req: CompletionRequest,
+@@ -390,13 +607,7 @@ class OllamaProvider(LLMProvider):
+             budget = req.max_output_tokens
+             retried_length = False
+             while True:
+-                response = await self._client.post(
+-                    url,
+-                    json=payload,
+-                    headers=headers,
+-                    extensions=extensions,
+-                    timeout=req_timeout,
+-                )
++                response = await self._post_bounded(url, payload, headers, extensions, req_timeout)
+                 if response.status_code == _HTTP_BAD_REQUEST and "think" in payload:
+                     del payload["think"]
+                     continue
+diff --git a/tests/agent/test_ollama_chat_tools.py b/tests/agent/test_ollama_chat_tools.py
+new file mode 100644
+index 00000000..5523df98
+--- /dev/null
++++ b/tests/agent/test_ollama_chat_tools.py
+@@ -0,0 +1,163 @@
++# ruff: noqa: INP001, D101, D103, ANN401
++# Copyright 2026 Kanban Platform Contributors
++"""Tests for OllamaProvider.chat_turn tool-calling hardening (KAN-542)."""
++
++from __future__ import annotations
++
++import json
++from typing import Any
++
++import httpx
++import pytest
++from pydantic import BaseModel
++
++from agent.providers.base import (
++    ChatMessage,
++    ChatTurnRequest,
++    StructuredRequest,
++    ToolCallingProvider,
++    ToolDefinition,
++)
++from agent.providers.errors import ProviderHTTPError, ProviderProtocolError
++from agent.providers.ollama import OllamaProvider, OllamaSettings
++
++MODEL = "qwen3:8b"
++TOOL = ToolDefinition(name="get_ticket", description="d", parameters={"type": "object"})
++
++
++class Out(BaseModel):
++    ok: bool
++
++
++def _provider(handler: Any) -> tuple[OllamaProvider, list[dict[str, Any]]]:
++    sent: list[dict[str, Any]] = []
++
++    def wrapped(request: httpx.Request) -> httpx.Response:
++        sent.append(json.loads(request.content))
++        return handler(request, len(sent))
++
++    settings = OllamaSettings(base_url="http://127.0.0.1:11434", model_allowlist=(MODEL,))
++    return OllamaProvider(settings, transport=httpx.MockTransport(wrapped)), sent
++
++
++def _req(**kw: Any) -> ChatTurnRequest:
++    return ChatTurnRequest(model=MODEL, messages=(ChatMessage(role="user", content="hi"),), **kw)
++
++
++def _ok(message: dict[str, Any], **extra: Any) -> httpx.Response:
++    return httpx.Response(200, json={"message": message, "done_reason": "stop", **extra})
++
++
++def test_protocol_runtime_check() -> None:
++    p, _ = _provider(lambda _r, _n: _ok({}))
++    assert isinstance(p, ToolCallingProvider)
++
++
++@pytest.mark.asyncio
++async def test_tool_calls_dict_and_string_args() -> None:
++    msg = {
++        "role": "assistant",
++        "content": "",
++        "tool_calls": [
++            {"id": "a", "function": {"name": "get_ticket", "arguments": {"k": 1}}},
++            {"function": {"name": "get_ticket", "arguments": '{"k": 2}'}},
++        ],
++    }
++    p, sent = _provider(lambda _r, _n: _ok(msg, prompt_eval_count=3, eval_count=4))
++    resp = await p.chat_turn(_req(tools=(TOOL,)))
++    assert [c.arguments for c in resp.message.tool_calls] == [{"k": 1}, {"k": 2}]
++    assert resp.message.tool_calls[0].id == "a"
++    assert resp.prompt_tokens == 3
++    assert sent[0]["tools"][0]["function"]["name"] == "get_ticket"
++    assert "format" not in sent[0]
++    assert sent[0]["stream"] is False
++
++
++@pytest.mark.asyncio
++async def test_final_structured_turn_with_format_and_think_false() -> None:
++    p, sent = _provider(lambda _r, _n: _ok({"content": '{"ok": true}', "thinking": "t"}))
++    req = _req(response_model=Out, think=False)
++    resp = await p.chat_turn(req)
++    assert sent[0]["think"] is False
++    assert sent[0]["format"]["properties"]["ok"]
++    assert "tools" not in sent[0]
++    assert resp.message.thinking == "t"
++    assert resp.message.content == '{"ok": true}'
++
++
++@pytest.mark.asyncio
++async def test_think_400_fallback() -> None:
++    def h(_r: httpx.Request, n: int) -> httpx.Response:
++        return httpx.Response(400, text="no think") if n == 1 else _ok({"content": "x"})
++
++    p, sent = _provider(h)
++    resp = await p.chat_turn(_req(think=True))
++    assert "think" in sent[0]
++    assert "think" not in sent[1]
++    assert resp.message.content == "x"
++
++
++@pytest.mark.asyncio
++async def test_length_retry_doubles_once() -> None:
++    def h(_r: httpx.Request, n: int) -> httpx.Response:
++        if n < 3:
++            return httpx.Response(200, json={"message": {"content": ""}, "done_reason": "length"})
++        return _ok({"content": "never"})
++
++    p, sent = _provider(h)
++    resp = await p.chat_turn(_req(max_output_tokens=100))
++    assert [s["options"]["num_predict"] for s in sent] == [100, 200]
++    assert resp.done_reason == "length"
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize("field", ["content", "thinking"])
++async def test_fake_tool_calls_in_text_ignored(field: str) -> None:
++    fake = json.dumps({"tool_calls": [{"function": {"name": "get_ticket", "arguments": {}}}]})
++    p, _ = _provider(lambda _r, _n: _ok({"content": "", field: fake} | {"content": fake}))
++    resp = await p.chat_turn(_req(tools=(TOOL,)))
++    assert resp.message.tool_calls == ()
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize(
++    "calls",
++    [
++        [{"function": {"name": "evil", "arguments": {}}}],
++        [{"function": {"name": 5, "arguments": {}}}],
++        [{"function": {"name": "get_ticket", "arguments": "[1]"}}],
++        [{"function": {"name": "get_ticket", "arguments": "{bad"}}],
++        [{"function": {"name": "get_ticket", "arguments": 7}}],
++        [{"function": {"name": "get_ticket", "arguments": "x" * 70000}}],
++        [{"nofunction": 1}],
++        "notalist",
++        [{"function": {"name": "get_ticket", "arguments": {}}}] * 9,
++    ],
++)
++async def test_invalid_tool_calls_rejected(calls: Any) -> None:
++    p, _ = _provider(lambda _r, _n: _ok({"content": "", "tool_calls": calls}))
++    with pytest.raises(ProviderProtocolError):
++        await p.chat_turn(_req(tools=(TOOL,)))
++
++
++@pytest.mark.asyncio
++async def test_oversize_rejected_chat_and_structured() -> None:
++    big = httpx.Response(200, content=b"x" * (8 * 1024 * 1024 + 1))
++    p, _ = _provider(lambda _r, _n: big)
++    with pytest.raises(ProviderProtocolError) as ei:
++        await p.chat_turn(_req())
++    assert ei.value.code == "STREAM_TOO_LARGE"
++    p2, _ = _provider(lambda _r, _n: httpx.Response(200, content=b"x" * (8 * 1024 * 1024 + 1)))
++    with pytest.raises(ProviderProtocolError):
++        await p2.generate_structured(StructuredRequest(model=MODEL, prompt="p", response_model=Out))
++
++
++@pytest.mark.asyncio
++async def test_error_body_scrubbed_and_truncated() -> None:
++    secret = "Bearer sk-abcdefghijklmnopqrstuvwxyz0123456789"
++    body = f"{secret} " + "y" * 5000
++    p, _ = _provider(lambda _r, _n: httpx.Response(500, text=body))
++    with pytest.raises(ProviderHTTPError) as ei:
++        await p.chat_turn(_req())
++    assert "abcdefghijklmnopqrstuvwxyz0123456789" not in str(ei.value)
++    assert len(str(ei.value)) < 700

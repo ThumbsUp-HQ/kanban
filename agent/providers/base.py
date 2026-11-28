@@ -43,6 +43,10 @@ __all__ = [
     "CLIRunRequest",
     "CLIRunResult",
     "CLIRunner",
+    "ChatMessage",
+    "ChatToolCall",
+    "ChatTurnRequest",
+    "ChatTurnResponse",
     "CompletionRequest",
     "EgressDenied",
     "EmbedBatchRequest",
@@ -61,6 +65,8 @@ __all__ = [
     "StructuredRequest",
     "StructuredResponse",
     "ToolCallStep",
+    "ToolCallingProvider",
+    "ToolDefinition",
 ]
 
 TModel = TypeVar("TModel", bound=BaseModel)
@@ -221,6 +227,78 @@ class LLMProvider(Protocol):
 
     async def health_probe(self) -> HealthStatus:
         """Probe upstream provider availability and health."""
+        ...
+
+
+class ToolDefinition(BaseModel):
+    """Declared tool (function) the model may call; the name forms the call allowlist."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+
+class ChatToolCall(BaseModel):
+    """Structured tool call emitted by the model (never parsed from free text)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str | None = None
+    name: str
+    arguments: dict[str, Any]
+
+
+class ChatMessage(BaseModel):
+    """Single chat transcript message."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    role: Literal["system", "user", "assistant", "tool"]
+    content: str = ""
+    thinking: str | None = None
+    tool_calls: tuple[ChatToolCall, ...] = ()
+    tool_name: str | None = None
+    tool_call_id: str | None = None
+
+
+class ChatTurnRequest(BaseModel):
+    """Single multi-turn chat request, optionally with tools or a structured schema."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
+
+    model: str
+    messages: tuple[ChatMessage, ...]
+    tools: tuple[ToolDefinition, ...] = ()
+    response_model: type[BaseModel] | None = None
+    temperature: float = 0.0
+    max_output_tokens: int = 4096
+    think: bool | None = None
+    ttft_deadline_ms: int | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChatTurnResponse(BaseModel):
+    """Result of one chat turn with telemetry."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    message: ChatMessage
+    raw_content: str
+    done_reason: str | None
+    ttft_ms: float
+    total_latency_ms: float
+    prompt_tokens: int
+    completion_tokens: int
+
+
+@runtime_checkable
+class ToolCallingProvider(Protocol):
+    """Provider supporting multi-turn tool-calling chat."""
+
+    async def chat_turn(self, req: ChatTurnRequest) -> ChatTurnResponse:
+        """Execute one chat turn; tool calls come only from structured fields."""
         ...
 
 
