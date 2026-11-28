@@ -19,6 +19,10 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent.providers.base import (
+    ChatMessage,
+    ChatToolCall,
+    ChatTurnRequest,
+    ChatTurnResponse,
     CLIRunRequest,
     CLIRunResult,
     CompletionRequest,
@@ -465,6 +469,64 @@ class FixtureLLMProvider:
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
         )
+
+    async def chat_turn(self, req: ChatTurnRequest) -> ChatTurnResponse:
+        """Replay one multi-turn chat step from tool_script then final_verdict.
+
+        Each tool-enabled turn emits the next tool_script step as a structured tool call
+        (step index = prior assistant tool-call messages). Once the script is exhausted a
+        plain assistant message ends the loop; the schema-bound final turn returns the
+        cassette final_verdict (or structured_output) as raw JSON.
+        """
+        prompt = "\n".join(m.content for m in req.messages)
+        cas = self._find_matching_cassette(
+            model=req.model,
+            prompt=prompt,
+            metadata=req.metadata,
+        )
+        self.call_log.append(
+            {
+                "method": "chat_turn",
+                "request": {"model": req.model, "messages_len": len(req.messages)},
+                "matched_matcher": cas.matcher.model_dump(),
+            }
+        )
+        await self._simulate_latency(cas.simulated_ttft_ms)
+        self._raise_fault(cas, req.ttft_deadline_ms)
+
+        usage_p = cas.usage.prompt_tokens if cas.usage else 0
+        usage_c = cas.usage.completion_tokens if cas.usage else 0
+
+        def _resp(msg: ChatMessage, raw: str) -> ChatTurnResponse:
+            return ChatTurnResponse(
+                message=msg,
+                raw_content=raw,
+                done_reason="stop",
+                ttft_ms=cas.simulated_ttft_ms,
+                total_latency_ms=cas.simulated_ttft_ms + 2.0,
+                prompt_tokens=usage_p,
+                completion_tokens=usage_c,
+            )
+
+        if req.response_model is not None:
+            raw_obj = cas.final_verdict if cas.final_verdict is not None else cas.structured_output
+            if raw_obj is None:
+                msg = "Cassette has neither final_verdict nor structured_output configured"
+                raise ProviderSchemaError(msg)
+            raw = json.dumps(raw_obj)
+            return _resp(ChatMessage(role="assistant", content=raw), raw)
+
+        step_idx = sum(1 for m in req.messages if m.role == "assistant" and m.tool_calls)
+        script = cas.tool_script or []
+        if req.tools and step_idx < len(script):
+            step = script[step_idx]
+            call = ChatToolCall(
+                id=f"fixture-{step_idx}",
+                name=step.call.tool,
+                arguments=dict(step.call.args),
+            )
+            return _resp(ChatMessage(role="assistant", content="", tool_calls=(call,)), "")
+        return _resp(ChatMessage(role="assistant", content="done"), "done")
 
     async def embed_batch(self, req: EmbedBatchRequest) -> list[list[float]]:
         """Replay or generate deterministic L2-normalized vector embeddings."""

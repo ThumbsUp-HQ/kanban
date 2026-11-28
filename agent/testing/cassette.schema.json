@@ -235,6 +235,13 @@
               },
               "json_contains": {
                 "type": "object"
+              },
+              "messages_len": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "has_tools": {
+                "type": "boolean"
               }
             }
           },
@@ -262,7 +269,10 @@
                   "type": "string"
                 }
               },
-              "json_body": {}
+              "json_body": {},
+              "text": {
+                "type": "string"
+              }
             }
           },
           "fault": {

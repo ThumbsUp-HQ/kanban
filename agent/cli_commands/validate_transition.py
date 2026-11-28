@@ -66,10 +66,46 @@ from kanban.runners.hub import (
 if TYPE_CHECKING:
     import argparse
 
+    import httpx
+
+    from agent.testing.http_cassette import RecordingTransport
+
 __all__ = [
     "configure_validate_transition_parser",
     "handle_validate_transition",
 ]
+
+
+def _build_ollama_provider(
+    args: argparse.Namespace,
+    agent_config: dict[str, Any],
+) -> tuple[Any, RecordingTransport | None]:
+    """Build an OllamaProvider wired to replay, record, or live transport."""
+    from agent.providers.ollama import OllamaProvider, OllamaSettings  # noqa: PLC0415
+    from agent.testing.http_cassette import CassetteTransport, RecordingTransport  # noqa: PLC0415
+
+    base_url = getattr(args, "base_url", None) or agent_config.get("base_url")
+    model = getattr(args, "model", None) or agent_config.get("model_id")
+    if not base_url or not model:
+        msg = (
+            "--provider ollama requires --base-url and --model (or agent config base_url/model_id)"
+        )
+        raise ValueError(msg)
+    agent_config["model"] = str(model)
+    timeout_s = float(agent_config.get("timeout_ms") or 60_000) / 1000.0
+    settings = OllamaSettings(
+        base_url=str(base_url),  # type: ignore[arg-type]
+        model_allowlist=(str(model),),
+        read_timeout_s=min(max(timeout_s, 1.0), 600.0),
+    )
+    recorder: RecordingTransport | None = None
+    transport: httpx.AsyncBaseTransport | None = None
+    if getattr(args, "http_cassette", None):
+        transport = CassetteTransport(Path(args.http_cassette))
+    elif getattr(args, "record_http_cassette", None):
+        recorder = RecordingTransport()
+        transport = recorder
+    return OllamaProvider(settings, transport=transport), recorder
 
 
 class ExplicitFixtureLLMProvider(FixtureLLMProvider):
@@ -174,6 +210,24 @@ def configure_validate_transition_parser(parser: argparse.ArgumentParser) -> Non
         type=str,
         default=None,
         help="Path to HTTP cassette for network replay.",
+    )
+    parser.add_argument(
+        "--record-http-cassette",
+        type=str,
+        default=None,
+        help="Write a scrubbed HTTP cassette of live provider exchanges to this path.",
+    )
+    parser.add_argument(
+        "--base-url",
+        type=str,
+        default=None,
+        help="Provider base URL (ollama); defaults to agent config base_url.",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Provider model name; defaults to agent config model_id.",
     )
     parser.add_argument(
         "--mcp-fixture",
@@ -756,7 +810,11 @@ async def handle_validate_transition(
     try:
         if harness_kind == "in_app_sdk":
             provider_inst: Any = None
-            if getattr(args, "cassette", None):
+            recorder: Any = None
+            provider_kind = getattr(args, "provider", None) or agent_config.get("provider")
+            if provider_kind == "ollama":
+                provider_inst, recorder = _build_ollama_provider(args, agent_config)
+            elif getattr(args, "cassette", None):
                 cas = load_cassette(args.cassette)
                 provider_inst = ExplicitFixtureLLMProvider([cas])
                 ttft_ms = cas.simulated_ttft_ms
@@ -770,7 +828,11 @@ async def handle_validate_transition(
                 provider=provider_inst,
                 mcp_transport=mcp_transport,
             )
-            raw_bytes = await in_app_harness.run(ctx, agent_config)
+            try:
+                raw_bytes = await in_app_harness.run(ctx, agent_config)
+            finally:
+                if recorder is not None and getattr(args, "record_http_cassette", None):
+                    recorder.save(args.record_http_cassette)
 
             for t in in_app_harness.last_tool_traces:
                 tool_steps.append(

@@ -11,12 +11,14 @@ import httpx
 import yaml
 
 from agent.testing.fixtures import CassetteMismatchError
+from kanban.security.scrubber import scrub_text
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
 __all__ = [
     "CassetteTransport",
+    "RecordingTransport",
 ]
 
 _OVERSIZE_BYTES: int = 70_000
@@ -85,6 +87,32 @@ class CassetteTransport(httpx.AsyncBaseTransport):
                     if actual_val != v:
                         msg = f"JSON mismatch for '{k}': expected {v!r}, got {actual_val!r}"
                         raise CassetteMismatchError(msg)
+
+        if "messages_len" in req_spec or "has_tools" in req_spec:
+            self._match_chat_shape(req_spec, body_bytes)
+
+    @staticmethod
+    def _match_chat_shape(req_spec: dict[str, Any], body_bytes: bytes) -> None:
+        """Match volatile-safe /api/chat shape predicates (message count, tools presence)."""
+        try:
+            actual = json.loads(body_bytes.decode("utf-8"))
+        except Exception as err:
+            msg = f"Failed to parse request JSON body: {err}"
+            raise CassetteMismatchError(msg) from err
+        if not isinstance(actual, dict):
+            msg = "Request JSON body is not an object"
+            raise CassetteMismatchError(msg)
+        if "messages_len" in req_spec:
+            messages = actual.get("messages")
+            got_len = len(messages) if isinstance(messages, list) else -1
+            if got_len != int(req_spec["messages_len"]):
+                msg = f"messages_len mismatch: expected {req_spec['messages_len']}, got {got_len}"
+                raise CassetteMismatchError(msg)
+        if "has_tools" in req_spec:
+            got_tools = bool(actual.get("tools"))
+            if got_tools != bool(req_spec["has_tools"]):
+                msg = f"has_tools mismatch: expected {req_spec['has_tools']}, got {got_tools}"
+                raise CassetteMismatchError(msg)
 
     def _render_fault(
         self,
@@ -207,3 +235,83 @@ class CassetteTransport(httpx.AsyncBaseTransport):
 
         resp_spec = exchange.get("response", {})
         return self._render_response(resp_spec, request)
+
+
+def _scrub_json(value: Any) -> Any:  # noqa: ANN401
+    """Recursively scrub every string inside a JSON-compatible value."""
+    if isinstance(value, str):
+        return scrub_text(value)
+    if isinstance(value, list):
+        return [_scrub_json(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _scrub_json(v) for k, v in value.items()}
+    return value
+
+
+class RecordingTransport(httpx.AsyncBaseTransport):
+    """Wrap a real transport and capture sequential exchanges as a replayable cassette.
+
+    Requests are recorded with non-volatile matchers only (model, stream, messages_len,
+    has_tools) so random per-run delimiters and nonces never break replay. Every string in
+    the recorded response is passed through scrub_text before it is written.
+    """
+
+    def __init__(self, inner: httpx.AsyncBaseTransport | None = None) -> None:
+        """Wrap inner (defaults to a real httpx.AsyncHTTPTransport)."""
+        self._inner: httpx.AsyncBaseTransport = inner or httpx.AsyncHTTPTransport()
+        self.exchanges: list[dict[str, Any]] = []
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        """Forward the request, capture a scrubbed exchange, return a buffered response."""
+        body_bytes = await request.aread()
+        response = await self._inner.handle_async_request(request)
+        raw = await response.aread()
+        await response.aclose()
+
+        req_spec: dict[str, Any] = {"method": request.method.upper(), "path": request.url.path}
+        try:
+            req_json = json.loads(body_bytes.decode("utf-8"))
+        except ValueError:
+            req_json = None
+        if isinstance(req_json, dict):
+            contains = {k: req_json[k] for k in ("model", "stream") if k in req_json}
+            if contains:
+                req_spec["json_contains"] = contains
+            messages = req_json.get("messages")
+            if isinstance(messages, list):
+                req_spec["messages_len"] = len(messages)
+            req_spec["has_tools"] = bool(req_json.get("tools"))
+
+        resp_spec: dict[str, Any] = {"status": response.status_code}
+        ctype = response.headers.get("content-type")
+        if ctype:
+            resp_spec["headers"] = {"content-type": ctype}
+        try:
+            resp_spec["json_body"] = _scrub_json(json.loads(raw.decode("utf-8")))
+        except ValueError:
+            resp_spec["text"] = scrub_text(raw.decode("utf-8", errors="replace"))
+        self.exchanges.append({"request": req_spec, "response": resp_spec})
+
+        return httpx.Response(
+            status_code=response.status_code,
+            headers=response.headers,
+            content=raw,
+            request=request,
+        )
+
+    def to_cassette_dict(self) -> dict[str, Any]:
+        """Return the captured exchanges as a cassette_version 1 document."""
+        return {
+            "cassette_version": 1,
+            "matcher": {},
+            "http_exchanges": list(self.exchanges),
+        }
+
+    def save(self, path: Path | str) -> None:
+        """Write the recorded cassette as YAML."""
+        text = yaml.safe_dump(self.to_cassette_dict(), sort_keys=False, allow_unicode=True)
+        Path(path).write_text(text, encoding="utf-8")
+
+    async def aclose(self) -> None:
+        """Close the wrapped transport."""
+        await self._inner.aclose()
