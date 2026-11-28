@@ -1,0 +1,457 @@
+diff --git a/agent/context/verdict.py b/agent/context/verdict.py
+index 997403c1..47c51a8a 100644
+--- a/agent/context/verdict.py
++++ b/agent/context/verdict.py
+@@ -75,6 +75,7 @@ class TransitionVerdict(BaseModel):
+     cited_files: list[str] = Field(default_factory=list)
+     field_updates: dict[str, Any] = Field(default_factory=dict)
+     add_labels: list[str] = Field(default_factory=list, max_length=MAX_LABELS_COUNT)
++    grade: Literal["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "F"] | None = None
+     add_links: list[VerdictLinkSpec] = Field(default_factory=list, max_length=MAX_LINKS_COUNT)
+ 
+     @field_validator("add_labels")
+@@ -257,6 +258,7 @@ def parse_verdict_output(raw: bytes, ctx: RenderedContext) -> VerdictResult:  #
+         cited_files=tuple(selected.cited_files),
+         verdict_sha256=sha256_bytes,
+         latency_ms=0,
++        grade=selected.grade,
+     )
+ 
+     return VerdictResult(
+diff --git a/agent/gates/worker.py b/agent/gates/worker.py
+index 0b9c2d05..ea10cbcd 100644
+--- a/agent/gates/worker.py
++++ b/agent/gates/worker.py
+@@ -77,6 +77,18 @@ class HarnessRegistry:
+             self._harnesses["in_app_sdk"] = InAppSdkHarness()
+         except ImportError:
+             pass
++        try:
++            from agent.runners.cli_pipe import CliPipeHarness  # noqa: PLC0415
++
++            self._harnesses["cli_pipe"] = CliPipeHarness()
++        except ImportError:
++            pass
++        try:
++            from agent.harnesses.remote_runner import RemoteRunnerHarness  # noqa: PLC0415
++
++            self._harnesses["remote_runner"] = RemoteRunnerHarness()
++        except ImportError:
++            pass
+ 
+     def register(self, harness_kind: str, harness: Harness) -> None:
+         """Register an execution harness implementation."""
+diff --git a/kanban/workflows/async_gate.py b/kanban/workflows/async_gate.py
+index f9730666..b9b69dd4 100644
+--- a/kanban/workflows/async_gate.py
++++ b/kanban/workflows/async_gate.py
+@@ -84,12 +84,14 @@ def format_reason_preview(reason_markdown: str) -> str:
+     return first_two[:MAX_REASON_PREVIEW_CHARS]
+ 
+ 
+-def format_veto_comment(
++def format_veto_comment(  # noqa: PLR0913
+     hook_name: str,
+     harness_label: str,
+     from_state_name: str,
+     to_state_name: str,
+     reason_markdown: str,
++    *,
++    grade: str | None = None,
+ ) -> str:
+     """Format normalized, scrubbed veto comment capped at 16,384 bytes."""
+     header = (
+@@ -99,15 +101,19 @@ def format_veto_comment(
+     normalized = normalize_to_markdown(sanitized_reason)
+     scrubbed = scrub_text(normalized)
+     capped = scrubbed[:MAX_VETO_COMMENT_BYTES]
++    if grade:
++        capped = f"Grade: {grade}\n\n{capped}"
+     return f"{header}\n\n{capped}"
+ 
+ 
+-def format_approve_comment(
++def format_approve_comment(  # noqa: PLR0913
+     hook_name: str,
+     harness_label: str,
+     from_state_name: str,
+     to_state_name: str,
+     reason_markdown: str,
++    *,
++    grade: str | None = None,
+ ) -> str:
+     """Format normalized, scrubbed approve comment capped at 65,536 bytes."""
+     header = (
+@@ -121,6 +127,8 @@ def format_approve_comment(
+     normalized = normalize_to_markdown(sanitized_reason)
+     scrubbed = scrub_text(normalized)
+     capped = scrubbed[:MAX_APPROVE_COMMENT_BYTES]
++    if grade:
++        capped = f"Grade: {grade}\n\n{capped}"
+     return f"{header}\n\n{capped}"
+ 
+ 
+@@ -477,6 +485,7 @@ class GateCoordinator:
+                 "reason": decision.reason_markdown,
+                 "verdict_sha256": verdict_hex,
+                 "cited_files": list(decision.cited_files),
++                "grade": decision.grade,
+             }
+ 
+             execution.status = "rejected"
+@@ -487,6 +496,7 @@ class GateCoordinator:
+                 "verdict_sha256": verdict_hex,
+                 "latency_ms": decision.latency_ms,
+                 "cited_files": list(decision.cited_files),
++                "grade": decision.grade,
+             }
+             execution.completed_at = now
+ 
+@@ -503,7 +513,12 @@ class GateCoordinator:
+                     principal_id=agent_def.principal_id,
+                 )
+                 veto_body = format_veto_comment(
+-                    hook.name, harness_label, from_name, to_name, decision.reason_markdown
++                    hook.name,
++                    harness_label,
++                    from_name,
++                    to_name,
++                    decision.reason_markdown,
++                    grade=decision.grade,
+                 )
+                 comment = IssueComment(
+                     id=uuid.uuid7() if hasattr(uuid, "uuid7") else uuid.uuid4(),
+@@ -737,6 +752,7 @@ class GateCoordinator:
+             "verdict_sha256": verdict_hex,
+             "reason": bounded_reason,
+             "reason_preview": reason_preview,
++            "grade": decision.grade,
+         }
+ 
+         # Apply accumulated field updates across all hook invocations
+@@ -797,6 +813,7 @@ class GateCoordinator:
+             "cited_files": list(decision.cited_files),
+             "reason": bounded_reason,
+             "reason_preview": reason_preview,
++            "grade": decision.grade,
+         }
+         execution.completed_at = now
+ 
+@@ -820,6 +837,7 @@ class GateCoordinator:
+             from_name,
+             to_name,
+             decision.reason_markdown or "",
++            grade=decision.grade,
+         )
+         comment = IssueComment(
+             id=uuid.uuid7() if hasattr(uuid, "uuid7") else uuid.uuid4(),
+@@ -1428,8 +1446,10 @@ def _gate_result_from_row(
+     verdict = verdict or {}
+     comment = str(verdict.get("reason") or verdict.get("reason_preview") or "")
+     findings = verdict.get("cited_files") or []
++    grade = verdict.get("grade")
+     if status in ("approved", "rejected"):
+         return {
++            "grade": grade,
+             "passed": status == "approved",
+             "status": status,
+             "verdict": verdict.get("decision", status),
+@@ -1438,6 +1458,7 @@ def _gate_result_from_row(
+             "execution_id": str(execution_id),
+         }
+     return {
++        "grade": grade,
+         "passed": False,
+         "status": "failed",
+         "verdict": verdict.get("decision", status),
+diff --git a/kanban/workflows/gate_types.py b/kanban/workflows/gate_types.py
+index 49259bf5..3fe0211a 100644
+--- a/kanban/workflows/gate_types.py
++++ b/kanban/workflows/gate_types.py
+@@ -87,3 +87,4 @@ class GateDecision:
+     cited_files: tuple[str, ...] = ()
+     verdict_sha256: bytes = b""
+     latency_ms: int = 0
++    grade: str | None = None
+diff --git a/mcp/internal_client.py b/mcp/internal_client.py
+index 1e0d25b6..37a5cc23 100644
+--- a/mcp/internal_client.py
++++ b/mcp/internal_client.py
+@@ -260,6 +260,7 @@ class KanbanApiClient:
+         json_data: object = None,
+         params: dict[str, Any] | None = None,
+         headers: dict[str, str] | None = None,
++        timeout_s: float | None = None,
+     ) -> object:
+         """Send authenticated internal request with identity forwarding and error mapping."""
+         req_headers = dict(headers or {})
+@@ -307,6 +308,16 @@ class KanbanApiClient:
+                 json=json_data,
+                 params=params,
+                 headers=req_headers,
++                timeout=(
++                    httpx.Timeout(
++                        connect=_CONNECT_TIMEOUT_S,
++                        read=timeout_s,
++                        write=_WRITE_TIMEOUT_S,
++                        pool=_POOL_TIMEOUT_S,
++                    )
++                    if timeout_s is not None
++                    else httpx.USE_CLIENT_DEFAULT
++                ),
+             )
+             if self.mode == "standalone_inprocess" and "x-kb-internal-auth" not in req.headers:
+                 req.headers["X-KB-Internal-Auth"] = create_internal_service_auth_header(
+diff --git a/mcp/surfaces/agent/complete_work.py b/mcp/surfaces/agent/complete_work.py
+index 10a874e2..7e2a921b 100644
+--- a/mcp/surfaces/agent/complete_work.py
++++ b/mcp/surfaces/agent/complete_work.py
+@@ -299,7 +299,8 @@ async def _complete_single(  # noqa: C901
+         "POST",
+         f"/api/v1/issues/{identifier}/complete-work",
+         json_data=payload,
+-        params={"wait": "true"},
++        params={"wait": "true", "wait_timeout_ms": 120000},
++        timeout_s=130.0,
+         subject_token=subject_token,
+         mcp_session_id=session_id,
+     )
+@@ -324,6 +325,7 @@ async def _complete_single(  # noqa: C901
+             "verdict": gate_result.get("verdict"),
+             "comment": str(gate_result.get("comment", "")),
+             "findings": list(gate_result.get("findings") or []),
++            **({"grade": gate_result["grade"]} if gate_result.get("grade") else {}),
+         }
+ 
+     # Check for 202 Accepted pending_agent_gate hold
+diff --git a/mcp/surfaces/agent/transition_ticket.py b/mcp/surfaces/agent/transition_ticket.py
+index 45284bf9..4f0ba533 100644
+--- a/mcp/surfaces/agent/transition_ticket.py
++++ b/mcp/surfaces/agent/transition_ticket.py
+@@ -188,7 +188,8 @@ async def transition_ticket(  # noqa: C901
+             "POST",
+             f"/api/v1/issues/{identifier}/transition",
+             json_data=payload,
+-            params={"wait": "true"},
++            params={"wait": "true", "wait_timeout_ms": 120000},
++            timeout_s=130.0,
+             subject_token=subject_token,
+             mcp_session_id=session_id,
+         )
+@@ -234,6 +235,7 @@ async def transition_ticket(  # noqa: C901
+             "verdict": gate_result.get("verdict"),
+             "comment": str(gate_result.get("comment", "")),
+             "findings": list(gate_result.get("findings") or []),
++            **({"grade": gate_result["grade"]} if gate_result.get("grade") else {}),
+         }
+ 
+     # Check for 202 Accepted pending_agent_gate hold
+diff --git a/tests/agent/test_gate_harness_registration.py b/tests/agent/test_gate_harness_registration.py
+new file mode 100644
+index 00000000..80c96ed6
+--- /dev/null
++++ b/tests/agent/test_gate_harness_registration.py
+@@ -0,0 +1,70 @@
++"""Harness registration and verdict grade validation tests (KAN-544)."""
++
++from __future__ import annotations
++
++import json
++from types import SimpleNamespace
++from typing import Any
++
++import pytest
++from pydantic import ValidationError
++
++from agent.context.verdict import TransitionVerdict, VerdictParseError, parse_verdict_output
++from agent.gates.worker import HarnessRegistry
++
++NONCE = "n" * 24
++GRADES = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "F"]
++
++
++def test_registry_registers_all_default_harnesses() -> None:
++    registry = HarnessRegistry()
++    for kind in ("in_app_sdk", "cli_pipe", "remote_runner"):
++        assert kind in registry
++        assert registry.get(kind) is not None
++
++
++def test_registry_without_defaults_is_empty() -> None:
++    registry = HarnessRegistry(auto_register_defaults=False)
++    assert "cli_pipe" not in registry
++
++
++@pytest.mark.parametrize("grade", GRADES)
++def test_transition_verdict_accepts_grade(grade: Any) -> None:
++    verdict = TransitionVerdict(nonce=NONCE, decision="approve", reason_markdown="ok", grade=grade)
++    assert verdict.grade == grade
++
++
++@pytest.mark.parametrize("grade", ["D", "a", "A++", "", "Z"])
++def test_transition_verdict_rejects_invalid_grade(grade: Any) -> None:
++    with pytest.raises(ValidationError):
++        TransitionVerdict(nonce=NONCE, decision="approve", reason_markdown="ok", grade=grade)
++
++
++def test_grade_defaults_to_none() -> None:
++    assert TransitionVerdict(nonce=NONCE, decision="approve", reason_markdown="ok").grade is None
++
++
++def _raw(grade: str | None) -> str:
++    body: dict[str, object] = {
++        "schema": "kb-transition-verdict/v1",
++        "nonce": NONCE,
++        "decision": "approve",
++        "reason_markdown": "fine",
++    }
++    if grade is not None:
++        body["grade"] = grade
++    return json.dumps(body)
++
++
++@pytest.mark.parametrize("grade", [*GRADES, None])
++def test_parse_verdict_output_forwards_grade(grade: str | None) -> None:
++    ctx = SimpleNamespace(verdict_nonce=NONCE, allowed_mutable_fields=frozenset())
++    result = parse_verdict_output(_raw(grade).encode("utf-8"), ctx)  # type: ignore[arg-type]
++    assert result.decision.grade == grade
++    assert result.verdict.grade == grade
++
++
++def test_parse_verdict_output_rejects_invalid_grade() -> None:
++    ctx = SimpleNamespace(verdict_nonce=NONCE, allowed_mutable_fields=frozenset())
++    with pytest.raises(VerdictParseError):
++        parse_verdict_output(_raw("D").encode("utf-8"), ctx)  # type: ignore[arg-type]
+diff --git a/tests/mcp/test_gate_sync_delivery.py b/tests/mcp/test_gate_sync_delivery.py
+new file mode 100644
+index 00000000..523e2b1c
+--- /dev/null
++++ b/tests/mcp/test_gate_sync_delivery.py
+@@ -0,0 +1,127 @@
++"""Grade round-trip and synchronous gate delivery tests (KAN-544)."""
++
++from __future__ import annotations
++
++import uuid
++from typing import Any
++
++import httpx
++import pytest
++
++from kanban.workflows.async_gate import (
++    _gate_result_from_row,
++    format_approve_comment,
++    format_veto_comment,
++)
++from kanban.workflows.gate_types import GateDecision
++from mcp.internal_client import KanbanApiClient
++from mcp.surfaces.agent.complete_work import complete_work
++from mcp.surfaces.agent.transition_ticket import transition_ticket
++
++
++class FakeClient:
++    """Records request kwargs and returns a canned gate payload."""
++
++    def __init__(self, gate: dict[str, Any]) -> None:
++        self.gate = gate
++        self.calls: list[dict[str, Any]] = []
++
++    async def request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
++        self.calls.append({"method": method, "path": path, **kwargs})
++        return {"gate": self.gate, "sequence_number": 1}
++
++
++@pytest.mark.parametrize("status", ["approved", "rejected"])
++def test_row_surfaces_grade(status: str) -> None:
++    row = _gate_result_from_row(uuid.uuid4(), status, {"decision": "x", "grade": "B+"})
++    assert row["grade"] == "B+"
++    assert row["passed"] is (status == "approved")
++
++
++def test_row_grade_absent_is_none_and_failed_has_grade() -> None:
++    assert _gate_result_from_row(uuid.uuid4(), "approved", None)["grade"] is None
++    assert _gate_result_from_row(uuid.uuid4(), "error", {"grade": "F"})["grade"] == "F"
++
++
++def test_comments_include_grade() -> None:
++    assert "Grade: A" in format_approve_comment("h", "l", "a", "b", "good", grade="A")
++    assert "Grade: F" in format_veto_comment("h", "l", "a", "b", "bad", grade="F")
++    assert "Grade:" not in format_approve_comment("h", "l", "a", "b", "good")
++    assert "Grade:" not in format_veto_comment("h", "l", "a", "b", "bad")
++
++
++def test_gate_decision_grade_default() -> None:
++    assert GateDecision(decision="approve", reason_markdown="r").grade is None
++    assert GateDecision(decision="reject", reason_markdown="r", grade="C").grade == "C"
++
++
++def _gate(passed: bool, grade: str | None) -> dict[str, Any]:
++    return {
++        "passed": passed,
++        "status": "approved" if passed else "rejected",
++        "verdict": "approve" if passed else "reject",
++        "comment": "c",
++        "findings": ["f.py"],
++        "execution_id": "e1",
++        "grade": grade,
++    }
++
++
++@pytest.mark.parametrize(("passed", "grade"), [(True, "A"), (False, "F")])
++async def test_transition_ticket_returns_grade(passed: bool, grade: str) -> None:
++    client = FakeClient(_gate(passed, grade))
++    res = await transition_ticket(
++        {"identifier": "KAN-1", "to_state": "In Review"},
++        client=client,  # type: ignore[arg-type]
++    )
++    assert res["grade"] == grade
++    assert res["passed"] is passed
++    call = client.calls[0]
++    assert call["timeout_s"] == 130.0
++    assert call["params"] == {"wait": "true", "wait_timeout_ms": 120000}
++
++
++async def test_transition_ticket_omits_grade_when_absent() -> None:
++    client = FakeClient(_gate(True, None))
++    res = await transition_ticket(
++        {"identifier": "KAN-1", "to_state": "In Review"},
++        client=client,  # type: ignore[arg-type]
++    )
++    assert "grade" not in res
++
++
++@pytest.mark.parametrize(("passed", "grade"), [(True, "A-"), (False, "C")])
++async def test_complete_work_returns_grade(passed: bool, grade: str) -> None:
++    client = FakeClient(_gate(passed, grade))
++    res = await complete_work(
++        {"identifier": "KAN-1", "summary": "done work"},
++        client=client,  # type: ignore[arg-type]
++    )
++    assert res["grade"] == grade
++    call = client.calls[0]
++    assert call["timeout_s"] == 130.0
++    assert call["params"] == {"wait": "true", "wait_timeout_ms": 120000}
++
++
++async def test_api_client_timeout_propagates() -> None:
++    seen: list[httpx.Request] = []
++
++    def handler(request: httpx.Request) -> httpx.Response:
++        seen.append(request)
++        return httpx.Response(200, json={"ok": True})
++
++    client = KanbanApiClient.__new__(KanbanApiClient)
++    client.__dict__.update(mode="cli_remote", api_token="t", response_body_limit_bytes=1_000_000)
++    client._client = httpx.AsyncClient(
++        transport=httpx.MockTransport(handler), base_url="http://test"
++    )
++
++    async def _noop(*_a: object, **_k: object) -> None:
++        return None
++
++    client._ensure_csrf_token = _noop  # type: ignore[method-assign]
++    await client.request("GET", "/x", timeout_s=130.0)
++    await client.request("GET", "/y")
++    assert seen[0].extensions["timeout"]["read"] == 130.0
++    assert seen[1].extensions["timeout"]["read"] != 130.0
++    await client._client.aclose()

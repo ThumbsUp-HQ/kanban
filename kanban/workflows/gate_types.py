@@ -87,3 +87,4 @@ class GateDecision:
     cited_files: tuple[str, ...] = ()
     verdict_sha256: bytes = b""
     latency_ms: int = 0
+    grade: str | None = None

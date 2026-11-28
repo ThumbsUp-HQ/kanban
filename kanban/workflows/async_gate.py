@@ -84,12 +84,14 @@ def format_reason_preview(reason_markdown: str) -> str:
     return first_two[:MAX_REASON_PREVIEW_CHARS]
 
 
-def format_veto_comment(
+def format_veto_comment(  # noqa: PLR0913
     hook_name: str,
     harness_label: str,
     from_state_name: str,
     to_state_name: str,
     reason_markdown: str,
+    *,
+    grade: str | None = None,
 ) -> str:
     """Format normalized, scrubbed veto comment capped at 16,384 bytes."""
     header = (
@@ -99,15 +101,19 @@ def format_veto_comment(
     normalized = normalize_to_markdown(sanitized_reason)
     scrubbed = scrub_text(normalized)
     capped = scrubbed[:MAX_VETO_COMMENT_BYTES]
+    if grade:
+        capped = f"Grade: {grade}\n\n{capped}"
     return f"{header}\n\n{capped}"
 
 
-def format_approve_comment(
+def format_approve_comment(  # noqa: PLR0913
     hook_name: str,
     harness_label: str,
     from_state_name: str,
     to_state_name: str,
     reason_markdown: str,
+    *,
+    grade: str | None = None,
 ) -> str:
     """Format normalized, scrubbed approve comment capped at 65,536 bytes."""
     header = (
@@ -121,6 +127,8 @@ def format_approve_comment(
     normalized = normalize_to_markdown(sanitized_reason)
     scrubbed = scrub_text(normalized)
     capped = scrubbed[:MAX_APPROVE_COMMENT_BYTES]
+    if grade:
+        capped = f"Grade: {grade}\n\n{capped}"
     return f"{header}\n\n{capped}"
 
 
@@ -477,6 +485,7 @@ class GateCoordinator:
                 "reason": decision.reason_markdown,
                 "verdict_sha256": verdict_hex,
                 "cited_files": list(decision.cited_files),
+                "grade": decision.grade,
             }
 
             execution.status = "rejected"
@@ -487,6 +496,7 @@ class GateCoordinator:
                 "verdict_sha256": verdict_hex,
                 "latency_ms": decision.latency_ms,
                 "cited_files": list(decision.cited_files),
+                "grade": decision.grade,
             }
             execution.completed_at = now
 
@@ -503,7 +513,12 @@ class GateCoordinator:
                     principal_id=agent_def.principal_id,
                 )
                 veto_body = format_veto_comment(
-                    hook.name, harness_label, from_name, to_name, decision.reason_markdown
+                    hook.name,
+                    harness_label,
+                    from_name,
+                    to_name,
+                    decision.reason_markdown,
+                    grade=decision.grade,
                 )
                 comment = IssueComment(
                     id=uuid.uuid7() if hasattr(uuid, "uuid7") else uuid.uuid4(),
@@ -737,6 +752,7 @@ class GateCoordinator:
             "verdict_sha256": verdict_hex,
             "reason": bounded_reason,
             "reason_preview": reason_preview,
+            "grade": decision.grade,
         }
 
         # Apply accumulated field updates across all hook invocations
@@ -797,6 +813,7 @@ class GateCoordinator:
             "cited_files": list(decision.cited_files),
             "reason": bounded_reason,
             "reason_preview": reason_preview,
+            "grade": decision.grade,
         }
         execution.completed_at = now
 
@@ -820,6 +837,7 @@ class GateCoordinator:
             from_name,
             to_name,
             decision.reason_markdown or "",
+            grade=decision.grade,
         )
         comment = IssueComment(
             id=uuid.uuid7() if hasattr(uuid, "uuid7") else uuid.uuid4(),
@@ -1428,8 +1446,10 @@ def _gate_result_from_row(
     verdict = verdict or {}
     comment = str(verdict.get("reason") or verdict.get("reason_preview") or "")
     findings = verdict.get("cited_files") or []
+    grade = verdict.get("grade")
     if status in ("approved", "rejected"):
         return {
+            "grade": grade,
             "passed": status == "approved",
             "status": status,
             "verdict": verdict.get("decision", status),
@@ -1438,6 +1458,7 @@ def _gate_result_from_row(
             "execution_id": str(execution_id),
         }
     return {
+        "grade": grade,
         "passed": False,
         "status": "failed",
         "verdict": verdict.get("decision", status),

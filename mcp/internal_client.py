@@ -260,6 +260,7 @@ class KanbanApiClient:
         json_data: object = None,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
+        timeout_s: float | None = None,
     ) -> object:
         """Send authenticated internal request with identity forwarding and error mapping."""
         req_headers = dict(headers or {})
@@ -307,6 +308,16 @@ class KanbanApiClient:
                 json=json_data,
                 params=params,
                 headers=req_headers,
+                timeout=(
+                    httpx.Timeout(
+                        connect=_CONNECT_TIMEOUT_S,
+                        read=timeout_s,
+                        write=_WRITE_TIMEOUT_S,
+                        pool=_POOL_TIMEOUT_S,
+                    )
+                    if timeout_s is not None
+                    else httpx.USE_CLIENT_DEFAULT
+                ),
             )
             if self.mode == "standalone_inprocess" and "x-kb-internal-auth" not in req.headers:
                 req.headers["X-KB-Internal-Auth"] = create_internal_service_auth_header(

@@ -77,6 +77,18 @@ class HarnessRegistry:
             self._harnesses["in_app_sdk"] = InAppSdkHarness()
         except ImportError:
             pass
+        try:
+            from agent.runners.cli_pipe import CliPipeHarness  # noqa: PLC0415
+
+            self._harnesses["cli_pipe"] = CliPipeHarness()
+        except ImportError:
+            pass
+        try:
+            from agent.harnesses.remote_runner import RemoteRunnerHarness  # noqa: PLC0415
+
+            self._harnesses["remote_runner"] = RemoteRunnerHarness()
+        except ImportError:
+            pass
 
     def register(self, harness_kind: str, harness: Harness) -> None:
         """Register an execution harness implementation."""

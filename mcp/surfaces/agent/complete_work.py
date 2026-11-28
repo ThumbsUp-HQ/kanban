@@ -299,7 +299,8 @@ async def _complete_single(  # noqa: C901
         "POST",
         f"/api/v1/issues/{identifier}/complete-work",
         json_data=payload,
-        params={"wait": "true"},
+        params={"wait": "true", "wait_timeout_ms": 120000},
+        timeout_s=130.0,
         subject_token=subject_token,
         mcp_session_id=session_id,
     )
@@ -324,6 +325,7 @@ async def _complete_single(  # noqa: C901
             "verdict": gate_result.get("verdict"),
             "comment": str(gate_result.get("comment", "")),
             "findings": list(gate_result.get("findings") or []),
+            **({"grade": gate_result["grade"]} if gate_result.get("grade") else {}),
         }
 
     # Check for 202 Accepted pending_agent_gate hold

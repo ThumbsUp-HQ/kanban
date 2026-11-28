@@ -75,6 +75,7 @@ class TransitionVerdict(BaseModel):
     cited_files: list[str] = Field(default_factory=list)
     field_updates: dict[str, Any] = Field(default_factory=dict)
     add_labels: list[str] = Field(default_factory=list, max_length=MAX_LABELS_COUNT)
+    grade: Literal["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "F"] | None = None
     add_links: list[VerdictLinkSpec] = Field(default_factory=list, max_length=MAX_LINKS_COUNT)
 
     @field_validator("add_labels")
@@ -257,6 +258,7 @@ def parse_verdict_output(raw: bytes, ctx: RenderedContext) -> VerdictResult:  # 
         cited_files=tuple(selected.cited_files),
         verdict_sha256=sha256_bytes,
         latency_ms=0,
+        grade=selected.grade,
     )
 
     return VerdictResult(
