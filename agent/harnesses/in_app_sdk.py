@@ -55,9 +55,9 @@ __all__ = [
     "load_reality_checker_guidance",
 ]
 
-MAX_TOOL_OUTPUT_BYTES: Final[int] = 65_536
-MAX_TOTAL_TOOL_OUTPUT_BYTES: Final[int] = 262_144
-MAX_TURNS_LIMIT: Final[int] = 8
+MAX_TOOL_OUTPUT_BYTES: Final[int] = 12_288
+MAX_TOTAL_TOOL_OUTPUT_BYTES: Final[int] = 49_152
+MAX_TURNS_LIMIT: Final[int] = 5
 MAX_TOOL_CALLS_LIMIT: Final[int] = 20
 DEFAULT_ESTIMATE_TOKENS: Final[int] = 1024
 DEFAULT_STRUCTURED_MAX_OUTPUT_TOKENS: Final[int] = 8192
@@ -192,7 +192,8 @@ def _cap_text(text: str, max_bytes: int = MAX_TOOL_OUTPUT_BYTES) -> str:
     raw = text.encode("utf-8", errors="replace")
     if len(raw) <= max_bytes:
         return text
-    return raw[:max_bytes].decode("utf-8", errors="ignore") + "\n[TRUNCATED]"
+    head = raw[:max_bytes].decode("utf-8", errors="ignore")
+    return head + "\n[TRUNCATED - narrow your path or pattern]"
 
 
 def _check_loop_limits(turns: int, max_turns: int, calls: int, max_calls: int) -> None:
@@ -373,7 +374,7 @@ class InAppSdkHarness:
                     text = "[TOOL_OUTPUT_BUDGET_EXHAUSTED]"
                 elif out_len > remaining:
                     text = text.encode("utf-8")[:remaining].decode("utf-8", errors="ignore")
-                    text += "\n[TRUNCATED]"
+                    text += "\n[TRUNCATED - narrow your path or pattern]"
                 cumulative += min(out_len, max(remaining, 0))
                 self.last_tool_traces.append(
                     ToolCallTrace(

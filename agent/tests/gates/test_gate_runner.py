@@ -194,15 +194,17 @@ async def test_gate_worker_runner_timeout_sweep() -> None:
     runner = GateWorkerRunner(session_factory=session_factory)  # type: ignore[arg-type]
 
     with patch("agent.gates.runner.GateCoordinator") as mock_coord_cls:
-        mock_coord_instance = AsyncMock()
-        mock_coord_cls.return_value = mock_coord_instance
+        mock_coord_cls.record_failure = AsyncMock()
 
         processed = await runner.poll_once()
         assert processed == 1
 
-        mock_coord_instance.record_failure.assert_awaited_once_with(
+        mock_coord_cls.record_failure.assert_awaited_once_with(
+            session=mock_session,
+            execution_id=exec_id,
+            hook_id=hook_id,
+            code="GATE_TIMEOUT",
             invocation_id=inv_id,
-            error_code="GATE_TIMEOUT",
             detail="Async agent gate exceeded deadline_at",
         )
 

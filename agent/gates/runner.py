@@ -253,20 +253,14 @@ class GateWorkerRunner:
             aal_level=2,
         )
         async with self.session_factory.session(admin_ctx) as session:
-            if invocation_id is not None:
-                await GateCoordinator(session).record_failure(
-                    invocation_id=invocation_id,
-                    error_code=code,
-                    detail=detail,
-                )
-            else:
-                await GateCoordinator.record_failure(
-                    session=session,
-                    execution_id=execution_id,  # type: ignore[arg-type]
-                    hook_id=hook_id,  # type: ignore[arg-type]
-                    code=code,
-                    detail=detail,
-                )
+            await GateCoordinator.record_failure(
+                session=session,
+                execution_id=execution_id,  # type: ignore[arg-type]
+                hook_id=hook_id,  # type: ignore[arg-type]
+                code=code,
+                invocation_id=invocation_id,
+                detail=detail,
+            )
             await session.commit()
 
     async def _load_entities(  # noqa: C901, PLR0912, PLR0915
@@ -697,8 +691,8 @@ class GateWorkerRunner:
                     detail="Async agent gate exceeded deadline_at",
                 )
                 handled += 1
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("Error recording gate timeout failure: %s", exc)
+            except Exception as exc:
+                logger.warning("Error recording gate timeout failure: %s", exc, exc_info=True)
             finally:
                 self._active_invocations.discard(inv_id)
                 self._execution_contexts.pop(exec_id, None)
@@ -768,10 +762,10 @@ class GateWorkerRunner:
                         detail="Async agent gate exceeded deadline_at",
                     )
                     handled += 1
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug("Error recording timeout failure: %s", exc)
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("Error handling gate dispatch: %s", exc)
+                except Exception as exc:
+                    logger.warning("Error recording timeout failure: %s", exc, exc_info=True)
+            except Exception as exc:
+                logger.warning("Error handling gate dispatch: %s", exc, exc_info=True)
             finally:
                 if heartbeat_task is not None:
                     heartbeat_task.cancel()
@@ -837,8 +831,8 @@ class GateWorkerRunner:
         while not stop_event.is_set():
             try:
                 await self.poll_once()
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("Gate worker runner poll iteration error: %s", exc)
+            except Exception as exc:
+                logger.warning("Gate worker runner poll iteration error: %s", exc, exc_info=True)
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop_event.wait(), timeout=self.poll_interval_s)
 
