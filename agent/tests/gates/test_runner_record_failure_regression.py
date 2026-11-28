@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent.gates import runner as runner_mod
+from kanban.workflows.async_gate import GateCoordinator
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -32,9 +33,11 @@ async def test_record_failure_with_invocation_id_passes_session() -> None:
     r._execution_contexts = {}  # noqa: SLF001
     r.workspace_id = None
     r.admin_principal_id = None
-    with patch.object(runner_mod.GateCoordinator, "record_failure", new=AsyncMock()) as m:
+    with patch.object(GateCoordinator, "record_failure", new=AsyncMock()) as m:
         inv = uuid.uuid4()
         await r.record_failure(uuid.uuid4(), uuid.uuid4(), "GATE_TIMEOUT", invocation_id=inv)
-    assert m.await_args.kwargs["session"] is session
-    assert m.await_args.kwargs["invocation_id"] == inv
+    call = m.await_args
+    assert call is not None
+    assert call.kwargs["session"] is session
+    assert call.kwargs["invocation_id"] == inv
     session.commit.assert_awaited_once()
